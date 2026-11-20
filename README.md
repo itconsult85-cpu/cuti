@@ -30,19 +30,26 @@ Sistem balas pesan otomatis untuk nomor hotline WhatsApp **DPD PDI Perjuangan DK
    npm install
    ```
 
-3. Jalankan aplikasi:
+3. **(Opsional) Konfigurasi lewat `.env`:**
+   ```bash
+   cp .env.example .env
+   # edit .env: isi PORT dan DASHBOARD_PASSWORD
+   ```
+   File dibaca otomatis saat aplikasi start. `.env` asli berisi password dan **tidak di-push ke GitHub**; yang tersimpan di repo hanya `.env.example` (template tanpa rahasia).
+
+4. Jalankan aplikasi:
    ```bash
    npm start
    ```
 
-4. Buka browser, akses **http://localhost:3000** (atau `http://<ip-server>:3000` dari komputer lain).
+5. Buka browser, akses **http://localhost:3000** (atau `http://<ip-server>:3000` dari komputer lain).
 
-5. Akan muncul **QR Code**. Di HP nomor hotline:
+6. Akan muncul **QR Code**. Di HP nomor hotline:
    - Buka WhatsApp → **Setelan** → **Perangkat Tertaut** → **Tautkan Perangkat**
    - Arahkan kamera HP ke QR di dashboard
    - Setelah ter-scan, status berubah menjadi **"Terhubung"** dan nomor hotline tampil di pojok kanan atas
 
-6. Selesai. Setiap pesan masuk ke nomor hotline akan dibalas otomatis sesuai alur menu, dan tercatat di dashboard.
+7. Selesai. Setiap pesan masuk ke nomor hotline akan dibalas otomatis sesuai alur menu, dan tercatat di dashboard.
 
 > Agar bot berjalan terus (24 jam), jalankan di laptop/server yang selalu menyala. Di Windows bisa gunakan `pm2 start src/index.js --name hotline` (install pm2 via `npm i -g pm2`) agar berjalan di background.
 
@@ -85,8 +92,10 @@ Pesan masuk → Welcome + Menu Utama (6 opsi)
 wa-hotline-bot/
 ├── package.json          # daftar dependensi
 ├── README.md             # panduan ini
+├── .env.example          # contoh konfigurasi (salin ke .env; .env asli tidak di-push)
 ├── src/
 │   ├── index.js          # entry point (jalankan bot + dashboard)
+│   ├── loadEnv.js        # pembaca file .env otomatis
 │   ├── whatsapp.js       # koneksi WhatsApp (Baileys) + QR
 │   ├── bot.js            # mesin percakapan / state machine
 │   ├── templates.js      # semua teks balasan (EDIT DI SINI)

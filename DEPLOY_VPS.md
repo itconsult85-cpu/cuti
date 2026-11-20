@@ -104,6 +104,18 @@ pm2 save
 
 > Setelah dashboard terbuka, ganti password lewat tab **Ringkasan → panel Keamanan Dashboard → Ganti Password**. Password baru disimpan ter-hash di database (menggantikan password environment) dan berlaku tanpa restart. Username login tetap `admin`; browser akan meminta login ulang setelah password diganti.
 
+### Alternatif — konfigurasi lewat file `.env` (lebih rapi untuk VPS)
+
+```bash
+cd /home/bonichi/wa-hotline-bot
+cp .env.example .env
+nano .env                 # isi PORT dan DASHBOARD_PASSWORD, simpan
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+Loader membaca `.env` otomatis saat start (tanpa perintah export). **Penting:** `.env` asli berisi password dan diabaikan Git — jangan di-push ke GitHub; yang ada di repo hanya `.env.example` (template kosong).
+
 Cek status:
 
 ```bash

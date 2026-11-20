@@ -8,3 +8,5 @@ data/.dashboard_password
 data/.env
 *.log
 .env
+# Template contoh boleh di-push; .env asli (berisi password) tidak
+!.env.example
