@@ -55,15 +55,19 @@ git clone https://github.com/itconsult85-cpu/cuti.git wa-hotline-bot
 cd wa-hotline-bot
 ```
 
-**Jika repo private** (git akan meminta username + Personal Access Token, bukan password):
+**Jika repo private** (git akan meminta username + Personal Access Token, **bukan password akun GitHub**):
 
 ```bash
 cd /home/bonichi
+# Simpan kredensial sekali saja agar tidak ditanya tiap pull:
+git config --global credential.helper store
 git clone https://github.com/itconsult85-cpu/cuti.git wa-hotline-bot
-# Username: itconsult85-cpu
-# Password: tempel Personal Access Token (scope repo)
+# Username : itconsult85-cpu
+# Password : tempel Personal Access Token (BUKAN password login GitHub)
 cd wa-hotline-bot
 ```
+
+Cara membuat token (classic, paling pasti): GitHub web → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)** → centang scope **`repo`** → Generate → salin (`ghp_...`). Token fine-grained (`github_pat_...`) harus diberi **Contents: Read and write** dan akses ke repo `cuti`, kalau tidak muncul error `403 Permission denied`.
 
 > Folder hasil: `/home/bonichi/wa-hotline-bot/` (bukan langsung di `/home/bonichi/`). Jika ingin seluruh kode berada tepat di `/home/bonichi/`, ganti `wa-hotline-bot` di perintah clone dengan `.`
 
@@ -146,6 +150,37 @@ loginctl enable-linger bonichi
 pm2 startup systemd -u bonichi --hp /home/bonichi
 pm2 save
 ```
+
+## Saat diminta Username & Password (ketahui konteksnya)
+
+Ada tiga kemungkinan layar login saat deploy, isi dengan berbeda:
+
+### 1. Saat perintah `git clone` / `git pull` di terminal VPS
+```
+Username for 'https://github.com': itconsult85-cpu
+Password for 'https://itconsult85-cpu@github.com': <tempel Personal Access Token>
+```
+- **Jangan** isi password akun GitHub — Git HTTPS GitHub sudah menolak password biasa dan akan gagal `403 Authentication failed`.
+- Password di sini = token `ghp_...` (scope `repo`). Saat mengetik token, layar tidak menampilkan karakter (normal), tekan Enter saja.
+- Biar tidak ditanya lagi: `git config --global credential.helper store` (kredensial tersimpan di `~/.git-credentials`).
+
+### 2. Saat membuka dashboard di browser (pop-up / halaman login)
+- **Username:** `admin`
+- **Password:** nilai `DASHBOARD_PASSWORD` yang Anda ketik di Langkah 6.
+- Pakai script otomatis? Password dibuat otomatis dan dibaca dengan:
+```bash
+cat /home/bonichi/wa-hotline-bot/data/.dashboard_password
+```
+- Lupa / ganti password:
+```bash
+cd /home/bonichi/wa-hotline-bot
+pm2 delete hotline
+DASHBOARD_PASSWORD="PasswordBaruYangKuat" PORT=3000 pm2 start ecosystem.config.js
+pm2 save
+```
+
+### 3. Saat perintah `sudo ... pm2 startup ...`
+- Itu meminta **password user VPS `bonichi`** (password SSH), bukan GitHub dan bukan password dashboard. Saat diketik tidak ada karakter yang muncul — itu normal, tekan Enter.
 
 ## Struktur folder di VPS
 
