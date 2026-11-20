@@ -8,13 +8,15 @@ module.exports = {
       name: 'hotline',
       script: 'src/index.js',
       cwd: __dirname,
+      // Bot WhatsApp dan database lokal harus dijalankan sebagai satu proses.
+      exec_mode: 'fork',
       instances: 1,
       autorestart: true,
       max_restarts: 15,
       watch: false,
       env: {
         NODE_ENV: 'production',
-        PORT: process.env.PORT || 3000,
+        PORT: process.env.PORT || 3100,
         // Hanya teruskan password bila diisi saat start; tanpa env, dashboard pakai
         // mode tanpa password (lokal) — atau langsung ganti lewat panel dashboard.
         ...(process.env.DASHBOARD_PASSWORD ? { DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD } : {})
