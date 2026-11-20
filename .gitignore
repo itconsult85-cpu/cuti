@@ -4,5 +4,7 @@ data/*.db-*
 data/auth/
 data/*.log
 data/creds.txt
+data/.dashboard_password
+data/.env
 *.log
 .env
