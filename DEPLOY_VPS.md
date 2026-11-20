@@ -241,6 +241,29 @@ pm2 restart hotline
 | pm2 online tapi dashboard 401 | Password salah; cek env saat start atau reset di Langkah 6 |
 | Dashboard terbuka tapi status "logged_out" | Di dashboard klik **Scan Ulang**, lalu scan QR baru |
 | Pesan masuk tanpa balasan | `pm2 logs hotline`; pastikan status `Terhubung`; restart tunnel jika pakai cloudflared |
+| Berulang **`connectionReplaced`** + error `Bad MAC` / `MessageCounterError` | Ada lebih dari satu proses/server yang memakai nomor & sesi yang sama. Lihat bagian khusus di bawah |
+
+### Jika log berulang `connectionReplaced` / `Bad MAC`
+
+Penyebab utama: **dua instance bot aktif bersamaan** untuk nomor WhatsApp yang sama** (mis. sisa `node` lama, `pm2` dobel, laptop/server lain yang masih jalan, atau sesi WhatsApp Web lain di HP). Keduanya saling menggantikan dan kunci enkripsi (signal session) menjadi tidak sinkron sehingga muncul `Bad MAC` / `Key used already`.
+
+Berantas di VPS:
+
+```bash
+pm2 list                       # pastikan hanya ada 1 proses "hotline"
+ps aux | grep -E 'node|index.js' | grep -v grep
+pm2 kill                       # hentikan semua proses pm2
+cd /home/bonichi/wa-hotline-bot
+pm2 start ecosystem.config.js
+pm2 save
+pm2 logs hotline               # seharusnya hanya satu "Terhubung sebagai 628..."
+```
+
+Juga cek di **HP nomor hotline**: WhatsApp → Setelan → Perangkat Tertaut, putuskan sesi yang tidak dikenal selain bot ini. Pastikan komputer/laptop atau server lama yang pernah menjalankan bot **dimatikan**.
+
+Jika error dekripsi tetap muncul pada satu sesi saja: dashboard → tombol **Scan Ulang**, lalu scan QR baru untuk membangun ulang kunci sesi. Update Baileys bila versi lama: `npm install @whiskeysockets/baileys@latest && pm2 restart hotline`.
+
+> Catatan: pesan `protocolMessage` / `fromMe=true` di log lama adalah pesan sistem/balasan keluar sendiri dan **bukan error**; log baru sudah difilter agar tidak mencetak noise tersebut.
 | QR tidak muncul di dashboard | Cek `pm2 logs hotline`; hapus folder `data/auth` lalu restart untuk QR baru |
 | Port 3000 diblokir provider | Pakai opsi tunnel Cloudflare (Langkah 7 bagian B) |
 | `EADDRINUSE: 3000` / "port 3000 terpakai" | Lihat bagian khusus di bawah: hentikan proses lama **atau** pindahkan bot ke port 3100 |

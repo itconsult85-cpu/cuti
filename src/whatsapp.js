@@ -39,10 +39,23 @@ const status = {
 
 let sock = null;
 let reconnectTimer = null;
+let starting = false;
 
 function getStatus() { return { ...status }; }
 
+// Cegah dua socket aktif bersamaan (sumber utama Bad MAC / connectionReplaced berulang).
 async function startSock() {
+  if (starting) { console.log('[wa] startSock sedang berjalan — panggilan dilewati agar tidak dobel koneksi'); return; }
+  starting = true;
+  await _startSockInternal().catch(err => {
+    starting = false;
+    console.error('[wa] gagal start socket:', err?.message || err);
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => startSock(), 5000);
+  });
+}
+
+async function _startSockInternal() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307] }));
 
@@ -76,6 +89,7 @@ async function startSock() {
       status.phoneNumber = sock.user?.id?.split(':')[0] || sock.user?.id || null;
       status.connectedAt = Date.now();
       status.lastError = null;
+      starting = false;
       db.logEvent('connected', status.phoneNumber);
       console.log('[wa] Terhubung sebagai', status.phoneNumber);
     }
@@ -87,16 +101,32 @@ async function startSock() {
       db.logEvent('disconnected', reason);
       console.log('[wa] Terputus:', reason);
 
+      if (reason === 'connectionReplaced') {
+        // Sesi yang sama dibuka instance lain (proses dobel / server lain / HP membuka WhatsApp Web).
+        // Jangan balas cepat — jeda lebih panjang agar tidak saling menggantikan dan merusak kunci enkripsi.
+        status.state = 'closed';
+        status.lastError = 'Koneksi digantikan instance lain — pastikan hanya satu proses bot aktif';
+        db.logEvent('connection_replaced', 'Dobel proses/server pada sesi WhatsApp yang sama');
+        console.warn('[wa] PERINGATAN: koneksi digantikan instance lain. Pastikan hanya SATU proses bot yang berjalan: pm2 list ; ps aux | grep node. Menunggu 10 detik...');
+        starting = false;
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(() => startSock(), 10000);
+        return;
+      }
+
       if (code === DisconnectReason.loggedOut) {
         status.state = 'logged_out';
         // Hapus sesi agar QR baru bisa di-scan
         try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); fs.mkdirSync(AUTH_DIR, { recursive: true }); } catch {}
         status.qr = null; status.qrDataUrl = null;
+        starting = false;
       } else {
         status.state = 'closed';
-        // Reconnect otomatis setelah 5 detik
+        // Reconnect otomatis; restartRequired diputar lebih cepat dari putusan biasa
+        const delay = reason === 'restartRequired' ? 3000 : 5000;
+        starting = false;
         clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(() => startSock(), 5000);
+        reconnectTimer = setTimeout(() => startSock(), delay);
       }
     }
   });
@@ -109,10 +139,15 @@ async function startSock() {
   sock.ev.on('contacts.set', ({ contacts }) => debugLog(`[contacts.set] count=${contacts?.length || 0}`));
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    debugLog(`[messages.upsert] type=${type}, count=${messages.length}`);
-    for (const m of messages) {
-      const ctype = m.message ? getContentType(m.message) : '(tanpa pesan)';
-      debugLog(`  raw: fromMe=${m.key?.fromMe} jid=${m.key?.remoteJid} ctype=${ctype} pushName=${m.pushName || '-'}`);
+    // Ringkas log: abaikan pesan terkirim sendiri (fromMe) dan protocolMessage
+    // agar log tidak penuh noise; pesan masuk yang relevan tetap dicatat.
+    const masuk = (messages || []).filter(m => !m.key?.fromMe && m.message && getContentType(m.message) !== 'protocolMessage');
+    if (type === 'notify' && masuk.length) {
+      debugLog(`[messages.upsert] type=${type}, pesan masuk=${masuk.length}`);
+      for (const m of masuk) {
+        const ctype = getContentType(m.message);
+        debugLog(`  raw: jid=${m.key?.remoteJid} ctype=${ctype} pushName=${m.pushName || '-'}`);
+      }
     }
     if (type !== 'notify') return;
     for (const m of messages) {
