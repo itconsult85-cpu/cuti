@@ -15,7 +15,9 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: process.env.PORT || 3000,
-        DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD || 'gantiPasswordDefaultIni'
+        // Hanya teruskan password bila diisi saat start; tanpa env, dashboard pakai
+        // mode tanpa password (lokal) — atau langsung ganti lewat panel dashboard.
+        ...(process.env.DASHBOARD_PASSWORD ? { DASHBOARD_PASSWORD: process.env.DASHBOARD_PASSWORD } : {})
       },
       error_file: __dirname + '/data/pm2-error.log',
       out_file: __dirname + '/data/pm2-out.log'

@@ -11,19 +11,54 @@ const Store = require('./templateStore');
 
 const app = express();
 
-// ---- Proteksi dashboard dengan password (wajib jika diakses publik / online) ----
-// Set via env: DASHBOARD_PASSWORD=rahasia123 . Jika tidak di-set, dashboard terbuka (hanya untuk lokal).
-const DASH_PASSWORD = process.env.DASHBOARD_PASSWORD || null;
-if (DASH_PASSWORD) {
-  app.use((req, res, next) => {
-    const expected = 'Basic ' + Buffer.from('admin:' + DASH_PASSWORD).toString('base64');
-    if (req.headers.authorization === expected) return next();
-    res.setHeader('WWW-Authenticate', 'Basic realm="Hotline Dashboard"');
-    return res.status(401).send('Autentikasi diperlukan — masukkan username "admin" dan password yang diberikan.');
-  });
+// ---- Proteksi dashboard (Basic Auth, username selalu "admin") ----
+// Prioritas password:
+//  1. hash tersimpan di DB hasil tombol "Ganti Password" di dashboard (tabel app_settings)
+//  2. environment DASHBOARD_PASSWORD
+//  3. tidak terkunci — hanya untuk pemakaian lokal development
+const crypto = require('crypto');
+const ADMIN_USER = 'admin';
+
+function hashPassword(plain) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(plain), salt, 64).toString('hex');
+  return salt + ':' + hash;
+}
+function verifyPassword(plain, stored) {
+  if (!stored || typeof plain !== 'string') return false;
+  const [salt, hash] = String(stored).split(':');
+  if (!salt || !hash) return false;
+  const candidate = crypto.scryptSync(plain, salt, 64);
+  const expected = Buffer.from(hash, 'hex');
+  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+}
+function safeEqual(a, b) {
+  const A = Buffer.from(String(a ?? ''));
+  const B = Buffer.from(String(b ?? ''));
+  return A.length === B.length && crypto.timingSafeEqual(A, B);
+}
+function authMode() {
+  const custom = db.getSetting('dashboard_password_hash');
+  if (custom) return { kind: 'custom', verify: (p) => verifyPassword(p, custom) };
+  if (process.env.DASHBOARD_PASSWORD) return { kind: 'env', verify: (p) => safeEqual(p, process.env.DASHBOARD_PASSWORD) };
+  return { kind: 'none', verify: () => true };
 }
 
 app.use(express.json());
+app.use((req, res, next) => {
+  const mode = authMode();
+  if (mode.kind === 'none') return next();
+  const header = req.headers.authorization || '';
+  if (header.startsWith('Basic ')) {
+    const decoded = Buffer.from(header.slice(6), 'base64').toString('utf8');
+    const idx = decoded.indexOf(':');
+    const user = idx > -1 ? decoded.slice(0, idx) : decoded;
+    const pass = idx > -1 ? decoded.slice(idx + 1) : '';
+    if (user === ADMIN_USER && mode.verify(pass)) return next();
+  }
+  res.setHeader('WWW-Authenticate', 'Basic realm="Hotline Dashboard"');
+  return res.status(401).json({ error: 'Autentikasi diperlukan. Username: admin.' });
+});
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ---- helpers tanggal ----
@@ -47,6 +82,39 @@ app.get('/api/events', (req, res) => {
 
 app.post('/api/reconnect', (req, res) => { wa.reconnect(); res.json({ ok: true }); });
 app.post('/api/rescan', (req, res) => { wa.rescan(); res.json({ ok: true }); });
+
+// ---- Akun dashboard: status, ganti password, kembali ke password environment ----
+app.get('/api/auth/status', (req, res) => {
+  const mode = authMode();
+  res.json({
+    username: ADMIN_USER,
+    mode: mode.kind,
+    locked: mode.kind !== 'none',
+    message: mode.kind === 'custom'
+      ? 'Menggunakan password kustom yang disimpan lewat dashboard.'
+      : mode.kind === 'env'
+        ? 'Menggunakan password dari environment DASHBOARD_PASSWORD.'
+        : 'Tidak ada password — hanya untuk lokal. Segera ganti password saat dipublikasikan.',
+  });
+});
+
+app.post('/api/change-password', (req, res) => {
+  const { oldPassword, newPassword } = req.body || {};
+  const mode = authMode();
+  if (mode.kind !== 'none' && !mode.verify(oldPassword || '')) {
+    return res.status(401).json({ error: 'Password lama salah.' });
+  }
+  if (!newPassword || String(newPassword).length < 6) {
+    return res.status(400).json({ error: 'Password baru minimal 6 karakter.' });
+  }
+  db.setSetting('dashboard_password_hash', hashPassword(String(newPassword)));
+  res.json({ ok: true, message: 'Password berhasil diganti. Silakan login ulang dengan password baru.' });
+});
+
+app.post('/api/auth/reset-password', (req, res) => {
+  db.deleteSetting('dashboard_password_hash');
+  res.json({ ok: true, mode: authMode().kind, message: 'Password kustom dihapus; kembali ke konfigurasi environment.' });
+});
 
 // ---- Template balasan (CRUD: lihat, edit, tambah, hapus, simpan) ----
 app.get('/api/templates', (req, res) => {

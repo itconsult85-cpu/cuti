@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS templates (
   updated_at INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_templates_name ON templates(name);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 `);
 
 // ---- messages ----
@@ -166,6 +172,17 @@ function deleteTemplate(id) { return deleteTpl.run(id).changes; }
 const countTpl = db.prepare('SELECT COUNT(*) AS n FROM templates');
 function countTemplates() { return countTpl.get().n; }
 
+// ---- pengaturan aplikasi (mis. hash password dashboard hasil ganti password) ----
+const getSettingStmt = db.prepare('SELECT value FROM app_settings WHERE key = ?');
+const setSettingStmt = db.prepare(`
+  INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+`);
+const delSettingStmt = db.prepare('DELETE FROM app_settings WHERE key = ?');
+function getSetting(key) { const r = getSettingStmt.get(key); return r ? r.value : null; }
+function setSetting(key, value) { return setSettingStmt.run(key, value, Date.now()).changes; }
+function deleteSetting(key) { return delSettingStmt.run(key).changes; }
+
 module.exports = {
   db,
   logMessage,
@@ -187,4 +204,7 @@ module.exports = {
   updateTemplate,
   deleteTemplate,
   countTemplates,
+  getSetting,
+  setSetting,
+  deleteSetting,
 };

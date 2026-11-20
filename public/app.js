@@ -230,6 +230,63 @@ $('btnReloadTpl').addEventListener('click', loadTemplates);
 $('btnExportCsv').addEventListener('click', () => { window.location = '/api/export.csv?' + rangeParams(); });
 $('btnExportPdf').addEventListener('click', () => { window.location = '/api/export.pdf?' + rangeParams(); });
 
+// ---- Keamanan: status login & ganti password dashboard ----
+async function loadAuthStatus() {
+  try {
+    const s = await (await fetch('/api/auth/status')).json();
+    const el = $('authStatus');
+    el.textContent = s.message;
+    el.className = 'small ' + (s.locked ? 'ok-text' : 'warn-text');
+    $('btnResetPw').classList.toggle('hidden', s.mode !== 'custom');
+    $('pwModeHint').textContent = s.mode === 'none'
+      ? 'Dashboard saat ini tanpa password. Tetapkan password baru untuk mengamankan akses.'
+      : 'Username login: admin';
+    $('pwOld').disabled = s.mode === 'none';
+    $('pwOld').placeholder = s.mode === 'none' ? 'Tidak diperlukan (belum ada password)' : 'Password saat ini';
+  } catch (e) { /* server belum siap */ }
+}
+
+$('btnChangePw').addEventListener('click', () => {
+  $('pwMsg').textContent = '';
+  $('pwMsg').className = 'form-msg';
+  $('pwOld').value = ''; $('pwNew').value = ''; $('pwNew2').value = '';
+  $('pwModal').classList.remove('hidden');
+  $('pwNew').focus();
+});
+$('btnPwCancel').addEventListener('click', () => $('pwModal').classList.add('hidden'));
+$('pwModal').addEventListener('click', (e) => { if (e.target === $('pwModal')) $('pwModal').classList.add('hidden'); });
+
+$('btnPwSave').addEventListener('click', async () => {
+  const oldPw = $('pwOld').value;
+  const newPw = $('pwNew').value;
+  const new2 = $('pwNew2').value;
+  const msg = $('pwMsg');
+  if (newPw.length < 6) { msg.textContent = 'Password baru minimal 6 karakter.'; msg.className = 'form-msg err'; return; }
+  if (newPw !== new2) { msg.textContent = 'Konfirmasi password tidak sama.'; msg.className = 'form-msg err'; return; }
+  msg.textContent = 'Menyimpan…'; msg.className = 'form-msg muted';
+  const r = await fetch('/api/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
+  });
+  const data = await r.json().catch(() => ({}));
+  if (r.ok) {
+    msg.textContent = (data.message || 'Password tersimpan.') + ' Halaman dimuat ulang…';
+    msg.className = 'form-msg ok';
+    setTimeout(() => { location.reload(); }, 2000);
+  } else {
+    msg.textContent = data.error || 'Gagal menyimpan password.';
+    msg.className = 'form-msg err';
+  }
+});
+
+$('btnResetPw').addEventListener('click', async () => {
+  if (!confirm('Hapus password kustom hasil ganti dari dashboard, lalu kembali ke password environment DASHBOARD_PASSWORD?')) return;
+  const r = await fetch('/api/auth/reset-password', { method: 'POST' });
+  if (r.ok) { alert('Password kustom dihapus.'); loadAuthStatus(); }
+  else alert('Gagal mereset password.');
+});
+
 // ---- helpers ----
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -238,6 +295,7 @@ function esc(s) {
 // ---- init + auto refresh ----
 loadStatus();
 loadStats();
+loadAuthStatus();
 setInterval(() => {
   loadStatus();
   if ($('tab-ringkasan').classList.contains('active')) loadStats();

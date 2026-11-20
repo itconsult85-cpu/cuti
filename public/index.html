@@ -58,6 +58,15 @@
       <div class="card"><div class="card-label">Balasan Terkirim (periode)</div><div class="card-value" id="statKeluar">–</div></div>
     </div>
 
+    <div class="panel security-panel">
+      <h3>Keamanan Dashboard</h3>
+      <div id="authStatus" class="muted small">Memeriksa konfigurasi…</div>
+      <div class="security-actions">
+        <button id="btnChangePw" class="btn btn-primary">Ganti Password</button>
+        <button id="btnResetPw" class="btn hidden">Kembalikan ke Password Environment</button>
+      </div>
+    </div>
+
     <div class="grid-2">
       <div class="panel">
         <h3>Grafik Pesan 14 Hari Terakhir</h3>
@@ -131,6 +140,31 @@
     </div>
   </section>
 </main>
+
+<!-- Modal Ganti Password -->
+<div id="pwModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>Ganti Password Dashboard</h3>
+    <p id="pwModeHint" class="muted small" style="margin-bottom:12px">Username login: admin</p>
+    <div class="form-row">
+      <label for="pwOld">Password Lama</label>
+      <input type="password" id="pwOld" autocomplete="current-password" placeholder="Password saat ini">
+    </div>
+    <div class="form-row">
+      <label for="pwNew">Password Baru (minimal 6 karakter)</label>
+      <input type="password" id="pwNew" autocomplete="new-password" placeholder="Buat password baru yang kuat">
+    </div>
+    <div class="form-row">
+      <label for="pwNew2">Konfirmasi Password Baru</label>
+      <input type="password" id="pwNew2" autocomplete="new-password" placeholder="Ulangi password baru">
+    </div>
+    <div id="pwMsg" class="form-msg"></div>
+    <div class="modal-actions">
+      <button id="btnPwCancel" class="btn">Batal</button>
+      <button id="btnPwSave" class="btn btn-primary">Simpan Password</button>
+    </div>
+  </div>
+</div>
 
 <footer class="footer">
   <span>Auto-refresh setiap 10 detik · Data tersimpan lokal di <code>data/hotline.db</code></span>

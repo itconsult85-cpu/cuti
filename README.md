@@ -13,6 +13,7 @@ Sistem balas pesan otomatis untuk nomor hotline WhatsApp **DPD PDI Perjuangan DK
 | **Database lokal** | Semua pesan tersimpan di `data/hotline.db` (SQLite) — tidak ada data dikirim ke pihak ketiga |
 | **Reconnect otomatis** | Jika koneksi putus, bot menyambung ulang sendiri. Sesi login tersimpan (tidak perlu scan ulang setiap restart) |
 | **Kembali ke menu utama** | Ketik `0` atau `menu` kapan saja untuk kembali ke menu utama |
+| **Keamanan dashboard** | Login `admin`; password bisa diganti langsung dari panel dashboard (tersimpan ter-hash di database, tanpa restart) |
 
 ## 🚀 Cara Menjalankan
 
@@ -47,7 +48,8 @@ Sistem balas pesan otomatis untuk nomor hotline WhatsApp **DPD PDI Perjuangan DK
 
 ## 📊 Dashboard
 
-- **Tab Ringkasan** — kartu statistik (hari ini/minggu ini/bulan ini), grafik 14 hari, menu paling sering dipilih, top pengirim
+- **Tab Ringkasan** — kartu statistik (hari ini/minggu ini/bulan ini), grafik 14 hari, menu paling sering dipilih, top pengirim, dan panel **Keamanan Dashboard** (status login + tombol **Ganti Password**)
+- **Ganti Password** — tombol di tab Ringkasan: isi password lama → password baru (min. 6 karakter) → Simpan. Password di-hash (scrypt) dan disimpan di `data/hotline.db`; browser minta login ulang dengan password baru. Tombol *Kembalikan ke Password Environment* untuk menghapus password kustom.
 - **Tab Log Pesan** — semua pesan masuk & keluar, bisa cari berdasarkan isi/nama/nomor, filter tanggal, pagination
 - **Tab Percakapan** — lihat utuh percakapan per pengirim (seperti chat WhatsApp)
 - **Tab Template Balasan** — melihat template balasan aktif
@@ -100,7 +102,7 @@ wa-hotline-bot/
 2. **Hindari spam** — beri jeda antar pesan (sudah diatur 400ms). Jika nomor diblokir WhatsApp karena terdeteksi spam, sistem tidak bisa mencegahnya; gunakan dengan wajar.
 3. **Backup data** — file `data/hotline.db` berisi semua laporan. Backup secara berkala.
 4. Jika ingin mengakses dashboard dari luar jaringan (mis. dari kantor lain), gunakan VPS/cloud dan buka port 3000, atau gunakan tunnel seperti `ngrok`.
-5. **Keamanan dashboard** — secara default dashboard bisa diakses siapa saja yang tahu IP-nya. Jika dipasang di server publik, tambahkan password (mis. via reverse proxy nginx dengan basic auth) atau batasi akses lewat firewall.
+5. **Keamanan dashboard** — saat dipasang di server publik, set `DASHBOARD_PASSWORD` saat start, atau langsung ganti lewat panel **Keamanan Dashboard** (tab Ringkasan). Username login tetap `admin`. Jika lupa dan terkunci, hapus hash tersimpan: dari folder proyek jalankan `node -e "require('./src/db').deleteSetting('dashboard_password_hash')"` lalu restart.
 
 ## ❓ Troubleshooting
 

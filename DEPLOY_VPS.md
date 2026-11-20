@@ -102,6 +102,8 @@ DASHBOARD_PASSWORD="BuatPasswordRahasiaAnda" PORT=3000 pm2 start ecosystem.confi
 pm2 save
 ```
 
+> Setelah dashboard terbuka, ganti password lewat tab **Ringkasan → panel Keamanan Dashboard → Ganti Password**. Password baru disimpan ter-hash di database (menggantikan password environment) dan berlaku tanpa restart. Username login tetap `admin`; browser akan meminta login ulang setelah password diganti.
+
 Cek status:
 
 ```bash
@@ -230,6 +232,19 @@ pm2 restart hotline
 | QR tidak muncul di dashboard | Cek `pm2 logs hotline`; hapus folder `data/auth` lalu restart untuk QR baru |
 | Port 3000 diblokir provider | Pakai opsi tunnel Cloudflare (Langkah 7 bagian B) |
 | `EADDRINUSE: 3000` / "port 3000 terpakai" | Lihat bagian khusus di bawah: hentikan proses lama **atau** pindahkan bot ke port 3100 |
+| Lupa password dashboard / terkunci | Masih login? klik **Kembalikan ke Password Environment**. Tidak bisa login? lihat bagian "Reset password dari VPS" di bawah |
+
+### Reset password dari VPS (terkunci)
+
+Password kustom hasil ganti tersimpan di tabel `app_settings` database. Untuk menghapusnya kembali ke konfigurasi environment:
+
+```bash
+cd /home/bonichi/wa-hotline-bot
+node -e "require('./src/db').deleteSetting('dashboard_password_hash')"
+pm2 restart hotline
+```
+
+Setelah itu login memakai password `DASHBOARD_PASSWORD` dari environment (atau dashboard terbuka bila env tidak diisi). Lihat juga opsi `sqlite3 data/hotline.db "DELETE FROM app_settings WHERE key='dashboard_password_hash';"` bila tersedia.
 
 ## Jika port 3000 terpakai
 
