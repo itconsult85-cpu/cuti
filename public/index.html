@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Hotline WhatsApp — DPD PDI Perjuangan DKI Jakarta</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">WA</div>
+    <div>
+      <h1>Hotline WhatsApp Gateway</h1>
+      <p class="sub">DPD PDI Perjuangan DKI Jakarta — Auto Reply &amp; Laporan</p>
+    </div>
+  </div>
+  <div class="status-area">
+    <div id="statusBadge" class="badge badge-starting">Memulai…</div>
+    <div id="phoneInfo" class="phone-info"></div>
+    <button id="btnReconnect" class="btn btn-sm">Reconnect</button>
+    <button id="btnRescan" class="btn btn-sm btn-danger">Scan Ulang</button>
+  </div>
+</header>
+
+<!-- Panel QR -->
+<section id="qrPanel" class="qr-panel hidden">
+  <div class="qr-card">
+    <h2>Scan QR untuk menghubungkan nomor hotline</h2>
+    <p class="muted">Buka WhatsApp di HP nomor hotline → <b>Setelan → Perangkat Tertaut → Tautkan Perangkat</b>, lalu arahkan ke QR ini.</p>
+    <img id="qrImg" alt="QR Code" />
+    <p class="muted small">Tidak perlu verifikasi Meta — cukup scan sekali, sesi tersimpan otomatis.</p>
+  </div>
+</section>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="ringkasan">Ringkasan</button>
+  <button class="tab" data-tab="pesan">Log Pesan</button>
+  <button class="tab" data-tab="percakapan">Percakapan</button>
+  <button class="tab" data-tab="template">Template Balasan</button>
+  <div class="tabs-right">
+    <input type="date" id="filterFrom" title="Dari tanggal">
+    <input type="date" id="filterTo" title="Sampai tanggal">
+    <button id="btnExportCsv" class="btn btn-sm btn-primary">Export CSV</button>
+    <button id="btnExportPdf" class="btn btn-sm btn-primary">Export PDF</button>
+  </div>
+</nav>
+
+<main>
+  <!-- TAB: RINGKASAN -->
+  <section id="tab-ringkasan" class="tab-panel active">
+    <div class="cards">
+      <div class="card"><div class="card-label">Pesan Masuk (hari ini)</div><div class="card-value" id="statHariIni">–</div></div>
+      <div class="card"><div class="card-label">Pesan Masuk (minggu ini)</div><div class="card-value" id="statMingguIni">–</div></div>
+      <div class="card"><div class="card-label">Pesan Masuk (bulan ini)</div><div class="card-value" id="statBulanIni">–</div></div>
+      <div class="card"><div class="card-label">Pengirim Unik (periode)</div><div class="card-value" id="statUnik">–</div></div>
+      <div class="card"><div class="card-label">Total Masuk (periode)</div><div class="card-value" id="statMasuk">–</div></div>
+      <div class="card"><div class="card-label">Balasan Terkirim (periode)</div><div class="card-value" id="statKeluar">–</div></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Grafik Pesan 14 Hari Terakhir</h3>
+        <div id="chart" class="chart"></div>
+      </div>
+      <div class="panel">
+        <h3>Menu Paling Sering Dipilih</h3>
+        <div id="menuBreakdown" class="breakdown"></div>
+        <h3 style="margin-top:18px">Top Pengirim</h3>
+        <div id="topSenders" class="breakdown"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: LOG PESAN -->
+  <section id="tab-pesan" class="tab-panel">
+    <div class="panel">
+      <div class="filter-row">
+        <input type="text" id="searchQ" placeholder="Cari isi pesan / nama / nomor…" class="input-wide">
+        <button id="btnSearch" class="btn btn-primary">Cari</button>
+        <button id="btnReset" class="btn">Reset</button>
+        <span id="msgTotal" class="muted small"></span>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Waktu</th><th>Arah</th><th>Nomor</th><th>Nama</th><th>Isi Pesan</th><th>Menu Pilihan</th></tr></thead>
+          <tbody id="msgBody"></tbody>
+        </table>
+      </div>
+      <div class="pager">
+        <button id="prevPage" class="btn btn-sm">‹ Sebelumnya</button>
+        <span id="pageInfo" class="muted small"></span>
+        <button id="nextPage" class="btn btn-sm">Berikutnya ›</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: PERCAKAPAN -->
+  <section id="tab-percakapan" class="tab-panel">
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Daftar Pengirim</h3>
+        <div id="convList" class="conv-list"></div>
+      </div>
+      <div class="panel">
+        <h3 id="convTitle">Pilih pengirim untuk melihat riwayat percakapan</h3>
+        <div id="convThread" class="conv-thread"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TAB: TEMPLATE (editor CRUD) -->
+  <section id="tab-template" class="tab-panel">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h3 style="margin:0">Editor Template Balasan</h3>
+        <div>
+          <button id="btnAddCustom" class="btn btn-primary">+ Tambah Aturan Balasan</button>
+          <button id="btnReloadTpl" class="btn btn-sm">Muat Ulang</button>
+        </div>
+      </div>
+      <p class="muted small" style="margin-bottom:14px">
+        <b>Template Bawaan</b> (alur menu) — bisa diedit, tidak bisa dihapus. Perubahan langsung aktif tanpa restart.<br>
+        <b>Aturan Tambahan</b> — balasan otomatis berbasis <i>keyword</i> (jika pesan berisi keyword tertentu, bot membalas dengan teks ini). Bisa ditambah &amp; dihapus.
+      </p>
+      <div id="tplStatus" class="muted small" style="margin-bottom:10px"></div>
+      <h4 style="color:#b91c1c;margin:14px 0 8px">📋 Template Bawaan (Alur Menu)</h4>
+      <div id="builtinList" class="tpl-list"></div>
+      <h4 style="color:#047857;margin:20px 0 8px">⚡ Aturan Tambahan (Keyword → Balasan Otomatis)</h4>
+      <div id="customList" class="tpl-list"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>Auto-refresh setiap 10 detik · Data tersimpan lokal di <code>data/hotline.db</code></span>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

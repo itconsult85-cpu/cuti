@@ -1,0 +1,8 @@
+node_modules/
+data/*.db
+data/*.db-*
+data/auth/
+data/*.log
+data/creds.txt
+*.log
+.env
