@@ -76,9 +76,14 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 echo "[5] pm2: $(command -v pm2 || echo './node_modules/.bin/pm2')"
 
-# 6) Start / restart aplikasi
-echo "[6] Menjalankan aplikasi via pm2..."
-export DASHBOARD_PASSWORD="$DASH_PW" PORT="${PORT:-3000}"
+# 6) Pilih port bebas (default 3000; bila terpakai otomatis naik ke 3100 dst.)
+PORT="${PORT:-3000}"
+while command -v ss >/dev/null 2>&1 && ss -ltn 2>/dev/null | grep -q ":$PORT "; do
+  echo "[6] Port $PORT sudah terpakai, mencoba port berikutnya..."
+  PORT=$((PORT+1))
+done
+echo "[6] Menjalankan aplikasi via pm2 di port $PORT ..."
+export DASHBOARD_PASSWORD="$DASH_PW" PORT="$PORT"
 pm2 delete "$APP_NAME" 2>/dev/null || true
 pm2 start ecosystem.config.js
 pm2 save
@@ -88,7 +93,7 @@ echo ""
 echo "============================================================"
 echo "  DEPLOY SELESAI"
 echo "============================================================"
-echo "Dashboard : http://$(hostname -I 2>/dev/null | awk '{print $1}'):3000"
+echo "Dashboard : http://$(hostname -I 2>/dev/null | awk '{print $1}'):$PORT"
 echo "Username  : admin"
 echo "Password  : $DASH_PW   (tersimpan di $PW_FILE)"
 echo ""
@@ -105,7 +110,7 @@ echo "Tunnel publik gratis (tanpa port terbuka), contoh:"
 echo "  mkdir -p ~/.local/bin"
 echo "  curl -L -o ~/.local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
 echo "  chmod +x ~/.local/bin/cloudflared"
-echo "  nohup ~/.local/bin/cloudflared tunnel --url http://localhost:3000 > data/cloudflared.log 2>&1 &"
+echo "  nohup ~/.local/bin/cloudflared tunnel --url http://localhost:$PORT > data/cloudflared.log 2>&1 &"
 echo "  (URL https://....trycloudflare.com muncul di data/cloudflared.log)"
 echo ""
 echo "Perintah harian:"

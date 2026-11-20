@@ -194,7 +194,44 @@ pm2 restart hotline
 | Pesan masuk tanpa balasan | `pm2 logs hotline`; pastikan status `Terhubung`; restart tunnel jika pakai cloudflared |
 | QR tidak muncul di dashboard | Cek `pm2 logs hotline`; hapus folder `data/auth` lalu restart untuk QR baru |
 | Port 3000 diblokir provider | Pakai opsi tunnel Cloudflare (Langkah 7 bagian B) |
-| `EADDRINUSE: 3000` | Port dipakai aplikasi lain: `PORT=3100 pm2 restart ecosystem.config.js --update-env` |
+| `EADDRINUSE: 3000` / "port 3000 terpakai" | Lihat bagian khusus di bawah: hentikan proses lama **atau** pindahkan bot ke port 3100 |
+
+## Jika port 3000 terpakai
+
+Cek siapa pemilik port:
+
+```bash
+sudo ss -ltnp | grep ':3000'
+# atau: sudo lsof -i :3000
+```
+
+### Opsi A — hentikan proses lama (jika itu bot versi lama atau aplikasi yang tidak penting)
+
+```bash
+cd /home/bonichi/wa-hotline-bot
+pm2 delete hotline
+# jika pemiliknya bukan pm2, pakai PID dari output ss:  kill <PID>
+```
+
+Lalu ulangi Langkah 6.
+
+### Opsi B — pindahkan bot ke port lain (mis. 3100)
+
+PM2 menyimpan environment lama, jadi hapus dulu, lalu start ulang dengan port baru:
+
+```bash
+cd /home/bonichi/wa-hotline-bot
+pm2 delete hotline
+PORT=3100 DASHBOARD_PASSWORD="PasswordAnda" pm2 start ecosystem.config.js
+pm2 save
+sudo ufw allow 3100/tcp        # hanya bila akses langsung lewat IP VPS
+# tunnel cloudflared diarahkan ke port baru:
+nohup ~/.local/bin/cloudflared tunnel --url http://localhost:3100 > data/cloudflared.log 2>&1 &
+```
+
+Verifikasi: `pm2 list` harus `online`, dan `ss -ltnp | grep 3100` menampilkan proses bot.
+
+> Catatan: `deploy-bonichi.sh` otomatis memilih port bebas (3000 → 3100 → …) bila port sebelumnya sudah dipakai, jadi masalah ini umumnya tidak muncul saat pakai script.
 
 ## Catatan keamanan
 
