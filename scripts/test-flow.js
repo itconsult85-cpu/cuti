@@ -51,12 +51,15 @@ r = step('628222@lid', 'Uji Dua', '2', 'Duren Sawit');
 check(r.stage === 'informasi_menu' && /Timur/.test(r.menuChoice), 'DPC Timur dipilih');
 r = step('628222@lid', 'Uji Dua', '#', 'NARAHUBUNG kami');
 check(r.closed === true, 'Perintah # menutup percakapan');
-r = step('628222@lid', 'Uji Dua', 'halo', 'tidak sesuai');
-check(r.stage !== 'closed', 'Pesan setelah # dianggap awal (bukan closed) dan dijawab sopan');
+r = step('628222@lid', 'Uji Dua', 'halo', 'NARAHUBUNG DPD');
+check(r.stage === 'main' && r.closed === false, 'Setelah #, pesan baru menampilkan menu Welcome (bukan balasan tolak)');
+check(!/tidak sesuai/i.test(r.replies.join('\n')), 'Pesan pasca-# TIDAK memakai balasan POLITE_REJECT');
 
-// ---- Alur 3: Pesan tidak dikenal -> balasan sopan; perintah 0 dan 9 ----
-r = step('628333@s.whatsapp.net', 'Uji Tiga', 'xyz?', 'tidak sesuai');
-check(r.stage === 'new' || r.stage === 'main', 'Teks ngawur dijawab balasan sopan khusus');
+// ---- Alur 3: kontak pertama bebas -> Welcome; menu menunggu -> balasan sopan; 0 dan 9 ----
+r = step('628333@s.whatsapp.net', 'Uji Tiga', 'selamat sore', 'NARAHUBUNG DPD');
+check(r.stage === 'main' && r.closed === false, 'Kontak pertama berisi sapaan -> menu Welcome');
+r = step('628333@s.whatsapp.net', 'Uji Tiga', 'abc ngawur', 'tidak sesuai');
+check(r.stage === 'main', 'Saat menu utama sedang menunggu, pesan ngawur dibalas POLITE_REJECT');
 r = step('628333@s.whatsapp.net', 'Uji Tiga', '5', 'DATA PENGIRIM');
 check(r.stage === 'form_pengiriman', 'Menu 5 -> form_pengiriman');
 r = step('628333@s.whatsapp.net', 'Uji Tiga', '9', 'NARAHUBUNG DPD');
@@ -66,6 +69,8 @@ check(r.stage === 'main', 'Perintah 0 kembali ke menu utama');
 r = step('628333@s.whatsapp.net', 'Uji Tiga', '5', 'DATA PENGIRIM');
 r = step('628333@s.whatsapp.net', 'Uji Tiga', 'Pak Budi, Dokumen, JNE', 'informasi yang telah');
 check(r.closed === true, 'Form pengiriman ditutup otomatis dengan closing pengiriman');
+r = step('628333@s.whatsapp.net', 'Uji Tiga', 'terima kasih', 'NARAHUBUNG DPD');
+check(r.stage === 'main' && r.closed === false, 'Setelah form selesai (closed), pesan baru kembali menampilkan Welcome');
 
 // ---- Alur 4: Aspirasi Kader ----
 r = step('628444@lid', 'Uji Empat', '4', 'Aspirasi');

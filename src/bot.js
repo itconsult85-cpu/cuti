@@ -66,6 +66,19 @@ function out(replies, opts = {}) {
   };
 }
 
+// ---- Eksekusi pilihan menu utama (dipakai dari stage 'new' maupun 'main') ----
+function dispatchMain(jid, name, data, c) {
+  const label = T.MAIN_MENU_LABELS[c];
+  data.prev = 'main';
+  if (c === 1) { db.setState(jid, name, { stage: 'struktur_menu', data }); return out([withHint(g('STRUKTUR_MENU', T.STRUKTUR_MENU))], { stage: 'struktur_menu', menuChoice: label }); }
+  if (c === 2) { db.setState(jid, name, { stage: 'badan_menu', data }); return out([withHint(g('BADAN_MENU', T.BADAN_MENU))], { stage: 'badan_menu', menuChoice: label }); }
+  if (c === 3) { db.setState(jid, name, { stage: 'perizinan_menu', data }); return out([withHint(g('PERIZINAN_MENU', T.PERIZINAN_MENU))], { stage: 'perizinan_menu', menuChoice: label }); }
+  if (c === 4) { db.setState(jid, name, { stage: 'aspirasi_menu', data }); return out([withHint(g('ASPIRASI_MENU', T.ASPIRASI_MENU))], { stage: 'aspirasi_menu', menuChoice: label }); }
+  if (c === 5) { db.setState(jid, name, { stage: 'form_pengiriman', data }); return out([g('FORM_PENGIRIMAN', T.FORM_PENGIRIMAN)], { stage: 'form_pengiriman', menuChoice: label }); }
+  db.setState(jid, name, { stage: 'informasi_menu', data });
+  return out([withHint(g('INFORMASI_MENU', T.INFORMASI_MENU))], { stage: 'informasi_menu', menuChoice: label });
+}
+
 // ---- Catat satu entri data terstruktur untuk tabel Laporan / Excel ----
 function record(jid, name, entry) {
   db.insertFormEntry({
@@ -147,19 +160,23 @@ function handle(jid, name, rawText) {
   };
 
   switch (stage) {
-    case 'new':
+    // Kontak PERTAMA, ATAU percakapan yang sudah ditutup (ketik #, pesan
+    // penutup form, atau timeout idle 2 menit): pesan apa pun yang bukan
+    // pilihan nomor menu dianggap pesan awal -> tampilkan menu sambutan.
+    // Balasan sopan "Bahasa/Balasan anda tidak sesuai" hanya dipakai saat
+    // sebuah menu/form sedang menunggu pilihan (stage 'main' ke bawah).
+    case 'new': {
+      const c = pick(trimmed, MAIN_KEYWORDS, 6);
+      if (!c) {
+        db.setState(jid, name, { stage: 'main', data: {} });
+        return out([withHint(g('WELCOME', T.WELCOME))], { stage: 'main' });
+      }
+      return dispatchMain(jid, name, data, c);
+    }
     case 'main': {
       const c = pick(trimmed, MAIN_KEYWORDS, 6);
       if (!c) return reject();
-      const label = T.MAIN_MENU_LABELS[c];
-      data.prev = 'main';
-      if (c === 1) { db.setState(jid, name, { stage: 'struktur_menu', data }); return out([withHint(g('STRUKTUR_MENU', T.STRUKTUR_MENU))], { stage: 'struktur_menu', menuChoice: label }); }
-      if (c === 2) { db.setState(jid, name, { stage: 'badan_menu', data }); return out([withHint(g('BADAN_MENU', T.BADAN_MENU))], { stage: 'badan_menu', menuChoice: label }); }
-      if (c === 3) { db.setState(jid, name, { stage: 'perizinan_menu', data }); return out([withHint(g('PERIZINAN_MENU', T.PERIZINAN_MENU))], { stage: 'perizinan_menu', menuChoice: label }); }
-      if (c === 4) { db.setState(jid, name, { stage: 'aspirasi_menu', data }); return out([withHint(g('ASPIRASI_MENU', T.ASPIRASI_MENU))], { stage: 'aspirasi_menu', menuChoice: label }); }
-      if (c === 5) { db.setState(jid, name, { stage: 'form_pengiriman', data }); return out([g('FORM_PENGIRIMAN', T.FORM_PENGIRIMAN)], { stage: 'form_pengiriman', menuChoice: label }); }
-      db.setState(jid, name, { stage: 'informasi_menu', data });
-      return out([withHint(g('INFORMASI_MENU', T.INFORMASI_MENU))], { stage: 'informasi_menu', menuChoice: label });
+      return dispatchMain(jid, name, data, c);
     }
 
     // ---- Menu 1: Struktur Partai (DPD / DPC / PAC) ----
