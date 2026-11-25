@@ -169,6 +169,8 @@ function updateTemplate(id, { label, keyword, text }) {
 }
 const deleteTpl = db.prepare('DELETE FROM templates WHERE id = ?');
 function deleteTemplate(id) { return deleteTpl.run(id).changes; }
+const deleteBuiltinTpl = db.prepare("DELETE FROM templates WHERE type = 'builtin'");
+function deleteBuiltinTemplates() { return deleteBuiltinTpl.run().changes; }
 const countTpl = db.prepare('SELECT COUNT(*) AS n FROM templates');
 function countTemplates() { return countTpl.get().n; }
 
@@ -203,6 +205,7 @@ module.exports = {
   insertTemplate,
   updateTemplate,
   deleteTemplate,
+  deleteBuiltinTemplates,
   countTemplates,
   getSetting,
   setSetting,

@@ -135,3 +135,13 @@ main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
 .form-msg.ok { color: #047857; font-weight: 700; }
 .form-msg.err { color: #b91c1c; font-weight: 700; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Laporan tab + chip filter */
+.chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 6px 13px; border: 1px solid #d1d5db; background: #fff; border-radius: 999px; cursor: pointer; font-size: 12.5px; color: #374151; }
+.chip:hover { background: #f3f4f6; }
+.chip.active { background: #b91c1c; color: #fff; border-color: #b91c1c; font-weight: 600; }
+.kpi-mini { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; font-size: 12.5px; color: #374151; }
+.kpi-mini b { color: #b91c1c; font-size: 15px; }
+.admin-badge { font-size: 10px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 6px; padding: 1px 7px; margin-left: 8px; font-weight: 600; }
+

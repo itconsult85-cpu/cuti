@@ -122,11 +122,23 @@ app.get('/api/templates', (req, res) => {
 });
 
 app.post('/api/templates', (req, res) => {
-  // Tambah CUSTOM rule baru (keyword -> balasan). Template builtin tidak bisa ditambah.
+  // Tambah CUSTOM rule baru (keyword -> balasan).
   const { label, keyword, text } = req.body || {};
   if (!keyword || !text) return res.status(400).json({ error: 'Keyword dan isi balasan wajib diisi.' });
   const name = 'custom_' + Date.now();
   const id = db.insertTemplate({ type: 'custom', name, keyword: keyword.trim(), label: label || keyword.trim(), text });
+  Store.reload();
+  res.json({ ok: true, id });
+});
+
+// Tambah alur/template BAWAAN — hanya untuk administrator (dashboard ini
+// seluruhnya sudah di belakang login admin; endpoint ini sengaja terpisah
+// dari rule custom agar penambahan alur bawaan bisa diaudit).
+app.post('/api/templates/builtin', (req, res) => {
+  const { label, text } = req.body || {};
+  if (!label || !text) return res.status(400).json({ error: 'Nama alur dan isi balasan wajib diisi.' });
+  const name = 'builtin_admin_' + Date.now();
+  const id = db.insertTemplate({ type: 'builtin', name, keyword: null, label: label.trim(), text });
   Store.reload();
   res.json({ ok: true, id });
 });
@@ -184,6 +196,11 @@ app.get('/api/stats', (req, res) => {
     });
   }
 
+  // Ringkasan grafik: hanya 6 pilihan MENU UTAMA yang ditampilkan.
+  const MAIN_LABELS = ['Struktur Partai', 'Badan/Sayap Partai', 'Perizinan', 'Aspirasi', 'Pengiriman', 'Informasi'];
+  const menuTerpilih = db.menuBreakdown(r.from, r.to)
+    .filter(m => MAIN_LABELS.some(k => (m.menu_choice || '').includes(k)));
+
   res.json({
     periode: { from: req.query.from || null, to: req.query.to || null },
     masuk_range: db.countBetween(r.from, r.to, 'in'),
@@ -193,7 +210,7 @@ app.get('/api/stats', (req, res) => {
     masuk_minggu_ini: db.countBetween(weekStart, now + day, 'in'),
     masuk_bulan_ini: db.countBetween(monthStart.getTime(), now + day, 'in'),
     top_pengirim: db.topSenders(r.from, r.to, 10),
-    menu_terpilih: db.menuBreakdown(r.from, r.to),
+    menu_terpilih: menuTerpilih,
     daily,
   });
 });
@@ -216,6 +233,80 @@ app.get('/api/conversations', (req, res) => {
 
 app.get('/api/conversation/:jid', (req, res) => {
   res.json(db.getConversation(req.params.jid));
+});
+
+// ---- Laporan per kategori (tab Laporan) + ekspor Excel ----
+const LAPORAN_KATEGORI = {
+  struktur: { label: 'Struktur Partai', where: "menu_choice LIKE '%Struktur%' OR stage LIKE 'struktur%'" },
+  badan: { label: 'Badan/Sayap Partai', where: "menu_choice LIKE '%Badan%' OR stage IN ('badan_menu','badan_pilih','form_izin_badan','activity_badan')" },
+  perizinan: { label: 'Perizinan Kegiatan', where: "(menu_choice LIKE '%Perizinan%' OR menu_choice LIKE '%Kehadiran%' OR menu_choice LIKE '%Peminjaman%') OR stage IN ('izin_target_menu','form_izin_dpd','form_izin_lain','form_izin_badan','activity_dpd','activity_lain','activity_badan','konfirmasi','form_keterangan','peminjaman_menu','form_peminjaman_aset','form_peminjaman_ruangan')" },
+  aspirasi: { label: 'Aspirasi', where: "menu_choice LIKE '%Aspirasi%' OR stage LIKE 'form_aspirasi%'" },
+  pengiriman: { label: 'Pengiriman', where: "menu_choice LIKE '%Pengiriman%' OR stage = 'form_pengiriman'" },
+  informasi: { label: 'Informasi', where: "menu_choice LIKE '%Informasi%' OR stage IN ('informasi_menu','dpc_menu')" },
+};
+
+function laporanRange(q) {
+  if (q.from || q.to) return parseRange(q);
+  const now = Date.now();
+  const day = 86400000;
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  if (q.periode === 'week') return { fromTs: todayStart.getTime() - 6 * day, toTs: now + day };
+  if (q.periode === 'month') { const m = new Date(); m.setDate(1); m.setHours(0, 0, 0, 0); return { fromTs: m.getTime(), toTs: now + day }; }
+  return { fromTs: todayStart.getTime(), toTs: now + day }; // harian (default)
+}
+
+function laporanRows(kategori, fromTs, toTs) {
+  const cat = LAPORAN_KATEGORI[kategori];
+  const where = ["direction = 'in'", 'ts >= ?', 'ts < ?'];
+  const args = [fromTs || 0, toTs || Date.now() + 86400000];
+  if (cat) where.push('(' + cat.where + ')');
+  return db.db.prepare(`SELECT * FROM messages WHERE ${where.join(' AND ')} ORDER BY ts DESC LIMIT 3000`).all(...args);
+}
+
+app.get('/api/laporan', (req, res) => {
+  const kategori = LAPORAN_KATEGORI[req.query.kategori] ? req.query.kategori : 'all';
+  const { fromTs, toTs } = laporanRange(req.query);
+  const rows = laporanRows(kategori, fromTs, toTs);
+  res.json({ kategori, periode: req.query.periode || 'day', fromTs, toTs, rows });
+});
+
+app.get('/api/laporan/excel', (req, res) => {
+  const kategori = LAPORAN_KATEGORI[req.query.kategori] ? req.query.kategori : 'all';
+  const { fromTs, toTs } = laporanRange(req.query);
+  const rows = laporanRows(kategori, fromTs, toTs);
+
+  let XLSX = null;
+  try { XLSX = require('xlsx'); } catch { XLSX = null; }
+
+  const payload = rows.map(r => ({
+    'Waktu': new Date(r.ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+    'Nama': r.name || '',
+    'Nomor': String(r.jid || '').replace(/@s\.whatsapp\.net|@lid/g, ''),
+    'Pilihan Menu': r.menu_choice || '',
+    'Tahap': r.stage || '',
+    'Isi Pesan / Jawaban': r.text || '',
+    'Data Form': r.form_data || '',
+  }));
+
+  if (!XLSX) {
+    // Fallback CSV (dibuka Excel) bila paket xlsx belum terpasang di VPS
+    const esc = (v) => { const s = String(v ?? '').replace(/"/g, '""'); return /[",\n]/.test(s) ? `"${s}"` : s; };
+    const header = ['Waktu', 'Nama', 'Nomor', 'Pilihan Menu', 'Tahap', 'Isi Pesan / Jawaban', 'Data Form'];
+    const lines = [header.join(',')];
+    for (const r of payload) lines.push(header.map(h => esc(r[h])).join(','));
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="laporan-${kategori}.csv"`);
+    return res.send('﻿' + lines.join('\n'));
+  }
+
+  const ws = XLSX.utils.json_to_sheet(payload.length ? payload : [{ 'Waktu': '(tidak ada data pada periode ini)' }]);
+  ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 60 }, { wch: 42 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan ' + (LAPORAN_KATEGORI[kategori]?.label || 'Semua Menu'));
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="laporan-${kategori}-${Date.now()}.xlsx"`);
+  res.send(buf);
 });
 
 // ---- export CSV (bisa dibuka langsung di Excel) ----

@@ -22,6 +22,7 @@ document.querySelectorAll('.tab').forEach(t => {
     if (t.dataset.tab === 'percakapan') loadConversations();
     if (t.dataset.tab === 'template') loadTemplates();
     if (t.dataset.tab === 'ringkasan') loadStats();
+    if (t.dataset.tab === 'laporan') loadLaporan();
   });
 });
 
@@ -178,7 +179,7 @@ function tplCard(t) {
     : `<input type="hidden" data-field="label" value="${esc(t.label)}">`;
   return `<div class="tpl-card ${t.type}" data-id="${t.id}">
     <div class="tpl-card-header">
-      <div class="tpl-card-title">${esc(t.label)}<span class="tpl-key">${isCustom ? 'custom' : t.name}</span></div>
+      <div class="tpl-card-title">${esc(t.label)}${isCustom ? `<span class="tpl-key">custom</span>` : `<span class="tpl-key">${esc(t.name)}</span><span class="admin-badge">Khusus Admin</span>`}</div>
       <div class="tpl-card-actions">
         <span class="tpl-msg"></span>
         <button class="btn btn-sm btn-primary btn-save">Simpan</button>
@@ -224,7 +225,59 @@ $('btnAddCustom').addEventListener('click', async () => {
   if (r.ok) loadTemplates();
   else { const e = await r.json().catch(()=>({})); alert('Gagal tambah: ' + (e.error || '')); }
 });
+$('btnAddBuiltin').addEventListener('click', async () => {
+  const label = prompt('Nama alur / template bawaan baru (mis. "Info Kontak Bidang"):\n\nHanya Administrator yang dapat menambah alur bawaan.');
+  if (!label) return;
+  const text = prompt('Isi balasan bawaan baru:') || '(belum diisi)';
+  const r = await fetch('/api/templates/builtin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, text }) });
+  if (r.ok) loadTemplates();
+  else { const e = await r.json().catch(()=>({})); alert('Gagal tambah alur bawaan: ' + (e.error || 'Khusus admin.')); }
+});
 $('btnReloadTpl').addEventListener('click', loadTemplates);
+
+// ---- Tab Laporan: 6 kategori menu utama, periode harian/mingguan/bulanan, ekspor Excel ----
+let lapKat = 'all', lapPer = 'day';
+async function loadLaporan() {
+  const p = new URLSearchParams();
+  p.set('kategori', lapKat);
+  p.set('periode', lapPer);
+  if ($('lapFrom').value) p.set('from', $('lapFrom').value);
+  if ($('lapTo').value) p.set('to', $('lapTo').value);
+  const data = await (await fetch('/api/laporan?' + p)).json();
+  $('lapSummary').innerHTML = `Total pesan masuk: <b>${data.rows.length}</b>`;
+  $('lapBody').innerHTML = data.rows.map(r => {
+    const t = new Date(r.ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+    const num = String(r.jid || '').replace(/@s\.whatsapp\.net|@lid/g, '');
+    let fd = '';
+    try { fd = r.form_data ? JSON.stringify(JSON.parse(r.form_data), null, 0) : ''; } catch { fd = r.form_data || ''; }
+    return `<tr>
+      <td>${t}</td><td>${esc(r.name || '')}</td><td>${num}</td>
+      <td>${esc(r.menu_choice || r.stage || '')}</td>
+      <td class="cell-text">${esc(r.text || '')}</td>
+      <td class="cell-text">${esc(fd)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="muted">Tidak ada data pada periode ini.</td></tr>';
+}
+document.querySelectorAll('#laporanChips .chip').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('#laporanChips .chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active'); lapKat = c.dataset.kat; loadLaporan();
+}));
+document.querySelectorAll('#laporanPeriode .chip').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('#laporanPeriode .chip').forEach(x => x.classList.remove('active'));
+  c.classList.add('active'); lapPer = c.dataset.per;
+  $('lapFrom').value = ''; $('lapTo').value = '';
+  loadLaporan();
+}));
+$('btnLapReload').addEventListener('click', loadLaporan);
+$('lapFrom').addEventListener('change', loadLaporan);
+$('lapTo').addEventListener('change', loadLaporan);
+$('btnExportExcel').addEventListener('click', () => {
+  const p = new URLSearchParams();
+  p.set('kategori', lapKat); p.set('periode', lapPer);
+  if ($('lapFrom').value) p.set('from', $('lapFrom').value);
+  if ($('lapTo').value) p.set('to', $('lapTo').value);
+  window.location = '/api/laporan/excel?' + p;
+});
 
 // ---- Export ----
 $('btnExportCsv').addEventListener('click', () => { window.location = '/api/export.csv?' + rangeParams(); });
@@ -300,4 +353,5 @@ setInterval(() => {
   loadStatus();
   if ($('tab-ringkasan').classList.contains('active')) loadStats();
   if ($('tab-pesan').classList.contains('active')) loadMessages();
+  if ($('tab-laporan').classList.contains('active')) loadLaporan();
 }, 10000);

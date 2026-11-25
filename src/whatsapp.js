@@ -177,11 +177,19 @@ async function _startSockInternal() {
 
         const result = bot.handle(jid, name, text);
 
+        db.logMessage({
+          direction: 'in', jid, name, text,
+          stage: result.stage, menu_choice: result.menuChoice, form_data: result.formData,
+        });
+
         for (const reply of result.replies) {
           // jeda kecil antar pesan agar tidak terlihat spam & urut
           await new Promise(r => setTimeout(r, 400));
           await sock.sendMessage(jid, { text: reply });
-          db.logMessage({ direction: 'out', jid, name, text: reply, stage: result.stage });
+          db.logMessage({
+            direction: 'out', jid, name, text: reply,
+            stage: result.stage, menu_choice: result.menuChoice, form_data: result.formData,
+          });
           console.log(`[wa] -> ${jid}: ${reply.slice(0, 60)}`);
         }
       } catch (err) {
@@ -208,4 +216,11 @@ function rescan() {
   setTimeout(() => startSock(), 500);
 }
 
-module.exports = { startSock, getStatus, reconnect, rescan };
+// Kirim teks ke satu nomor (dipakai juga scheduler penutup otomatis)
+async function sendText(jid, text) {
+  if (!sock) return false;
+  await sock.sendMessage(jid, { text });
+  return true;
+}
+
+module.exports = { startSock, getStatus, reconnect, rescan, sendText };

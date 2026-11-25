@@ -38,6 +38,7 @@
   <button class="tab" data-tab="pesan">Log Pesan</button>
   <button class="tab" data-tab="percakapan">Percakapan</button>
   <button class="tab" data-tab="template">Template Balasan</button>
+  <button class="tab" data-tab="laporan">Laporan</button>
   <div class="tabs-right">
     <input type="date" id="filterFrom" title="Dari tanggal">
     <input type="date" id="filterTo" title="Sampai tanggal">
@@ -75,7 +76,7 @@
       <div class="panel">
         <h3>Menu Paling Sering Dipilih</h3>
         <div id="menuBreakdown" class="breakdown"></div>
-        <h3 style="margin-top:18px">Top Pengirim</h3>
+        <h3 style="margin-top:18px">Top 10 Pengirim Teratas</h3>
         <div id="topSenders" class="breakdown"></div>
       </div>
     </div>
@@ -124,12 +125,13 @@
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
         <h3 style="margin:0">Editor Template Balasan</h3>
         <div>
-          <button id="btnAddCustom" class="btn btn-primary">+ Tambah Aturan Balasan</button>
+          <button id="btnAddBuiltin" class="btn btn-primary">+ Tambah Alur Bawaan (Khusus Admin)</button>
+          <button id="btnAddCustom" class="btn">+ Tambah Aturan Keyword</button>
           <button id="btnReloadTpl" class="btn btn-sm">Muat Ulang</button>
         </div>
       </div>
       <p class="muted small" style="margin-bottom:14px">
-        <b>Template Bawaan</b> (alur menu) — bisa diedit, tidak bisa dihapus. Perubahan langsung aktif tanpa restart.<br>
+        <b>Template Bawaan (Alur Menu)</b> hanya dapat <b>ditambah, diubah, dan disimpan oleh Administrator</b> yang login dashboard; tidak dapat dihapus. Perubahan langsung aktif tanpa restart.<br>
         <b>Aturan Tambahan</b> — balasan otomatis berbasis <i>keyword</i> (jika pesan berisi keyword tertentu, bot membalas dengan teks ini). Bisa ditambah &amp; dihapus.
       </p>
       <div id="tplStatus" class="muted small" style="margin-bottom:10px"></div>
@@ -137,6 +139,48 @@
       <div id="builtinList" class="tpl-list"></div>
       <h4 style="color:#047857;margin:20px 0 8px">⚡ Aturan Tambahan (Keyword → Balasan Otomatis)</h4>
       <div id="customList" class="tpl-list"></div>
+    </div>
+  </section>
+
+  <!-- TAB: LAPORAN -->
+  <section id="tab-laporan" class="tab-panel">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+        <h3 style="margin:0">Laporan Percakapan per Menu Utama</h3>
+        <button id="btnExportExcel" class="btn btn-primary">⬇ Download Excel (.xlsx)</button>
+      </div>
+      <div class="filter-row">
+        <span class="muted small"><b>Kategori:</b></span>
+        <div class="chip-row" id="laporanChips">
+          <button class="chip active" data-kat="all">Semua Menu</button>
+          <button class="chip" data-kat="struktur">Struktur Partai</button>
+          <button class="chip" data-kat="badan">Badan/Sayap Partai</button>
+          <button class="chip" data-kat="perizinan">Perizinan Kegiatan</button>
+          <button class="chip" data-kat="aspirasi">Aspirasi</button>
+          <button class="chip" data-kat="pengiriman">Pengiriman</button>
+          <button class="chip" data-kat="informasi">Informasi</button>
+        </div>
+      </div>
+      <div class="filter-row">
+        <span class="muted small"><b>Periode:</b></span>
+        <div class="chip-row" id="laporanPeriode">
+          <button class="chip active" data-per="day">Harian</button>
+          <button class="chip" data-per="week">Mingguan</button>
+          <button class="chip" data-per="month">Bulanan</button>
+        </div>
+        <input type="date" id="lapFrom" title="Dari tanggal">
+        <input type="date" id="lapTo" title="Sampai tanggal">
+        <button id="btnLapReload" class="btn btn-sm">Muat Ulang</button>
+      </div>
+      <div class="kpi-mini" id="lapSummary"></div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr>
+            <th>Waktu</th><th>Nama</th><th>Nomor</th><th>Pilihan Menu / Submenu</th><th>Isi Pesan / Jawaban</th><th>Data Form</th>
+          </tr></thead>
+          <tbody id="lapBody"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </main>

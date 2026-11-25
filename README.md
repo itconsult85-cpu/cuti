@@ -1,18 +1,21 @@
 # Hotline WhatsApp Auto-Reply Gateway + Dashboard
 
-Sistem balas pesan otomatis untuk nomor hotline WhatsApp **DPD PDI Perjuangan DKI Jakarta**, sesuai template pada file `WA CHAT BOT.docx`.
+Sistem balas pesan otomatis untuk nomor hotline WhatsApp **NARAHUBUNG DPD PDI Perjuangan DKI Jakarta**, sesuai alur pada file `FLOW NARAHUBUNG DPD.docx`.
 
 ## ✅ Fitur Utama
 
 | Fitur | Keterangan |
 |---|---|
-| **Auto-reply multi-level menu** | 6 menu utama (Struktur Partai, Badan/Sayap, Penyampaian, Perizinan, Pengiriman, Informasi) + sub-menu + form isian, persis seperti template |
+| **Auto-reply multi-level menu** | 6 menu utama (Struktur Partai, Badan/Sayap Partai, Perizinan, Aspirasi, Pengiriman, Informasi) + sub-menu + form isian, sesuai alur terbaru |
+| **Perintah di setiap pesan** | Ketik `0` Menu Utama, `9` Menu Sebelumnya, `#` Mengakhiri percakapan |
+| **Tutup otomatis idle 2 menit** | Jika end user tidak membalas selama 2 menit, percakapan ditutup dengan pesan penutup; pesan berikutnya dianggap pesan awal baru |
+| **Balasan sopan khusus** | Pesan tidak dikenal / di luar konteks / tidak sesuai dijawab dengan balasan ketidakcocokan yang sudah ditetapkan |
 | **Tanpa verifikasi Meta** | Pakai protokol WhatsApp Web (Multi Device) — cukup **scan QR** sekali dengan HP nomor hotline. Tidak perlu akun Business API, tidak perlu approval Meta |
-| **Dashboard web** | Buka di browser: status koneksi, QR, statistik, log pesan, riwayat percakapan per pengirim |
-| **Laporan / Export** | Export **CSV** (bisa dibuka Excel) dan **PDF**, bisa filter per periode tanggal + pencarian |
+| **Dashboard web** | Status koneksi, QR, statistik, log pesan, riwayat percakapan, editor template, dan tab **Laporan** per kategori menu |
+| **Laporan Excel** | Tab Laporan: tabel per kategori menu utama, filter **Harian / Mingguan / Bulanan** + rentang tanggal, tombol **Download Excel (.xlsx)** |
+| **Hak akses admin** | Template/alur bawaan hanya bisa ditambah/diubah/ditambah alurnya oleh Administrator yang login dashboard; aturan keyword tambahan dikelola terpisah |
 | **Database lokal** | Semua pesan tersimpan di `data/hotline.db` (SQLite) — tidak ada data dikirim ke pihak ketiga |
 | **Reconnect otomatis** | Jika koneksi putus, bot menyambung ulang sendiri. Sesi login tersimpan (tidak perlu scan ulang setiap restart) |
-| **Kembali ke menu utama** | Ketik `0` atau `menu` kapan saja untuk kembali ke menu utama |
 | **Keamanan dashboard** | Login `admin`; password bisa diganti langsung dari panel dashboard (tersimpan ter-hash di database, tanpa restart) |
 
 ## 🚀 Cara Menjalankan
@@ -55,36 +58,42 @@ Sistem balas pesan otomatis untuk nomor hotline WhatsApp **DPD PDI Perjuangan DK
 
 ## 📊 Dashboard
 
-- **Tab Ringkasan** — kartu statistik (hari ini/minggu ini/bulan ini), grafik 14 hari, menu paling sering dipilih, top pengirim, dan panel **Keamanan Dashboard** (status login + tombol **Ganti Password**)
+- **Tab Ringkasan** — kartu statistik (hari ini/minggu ini/bulan ini), grafik 14 hari, **Menu Paling Sering Dipilih (6 menu utama)**, **Top 10 Pengirim**, dan panel **Keamanan Dashboard** (status login + tombol **Ganti Password**)
 - **Ganti Password** — tombol di tab Ringkasan: isi password lama → password baru (min. 6 karakter) → Simpan. Password di-hash (scrypt) dan disimpan di `data/hotline.db`; browser minta login ulang dengan password baru. Tombol *Kembalikan ke Password Environment* untuk menghapus password kustom.
 - **Tab Log Pesan** — semua pesan masuk & keluar, bisa cari berdasarkan isi/nama/nomor, filter tanggal, pagination
 - **Tab Percakapan** — lihat utuh percakapan per pengirim (seperti chat WhatsApp)
-- **Tab Template Balasan** — melihat template balasan aktif
-- **Tombol Export CSV / Export PDF** — download laporan sesuai filter tanggal yang dipilih
+- **Tab Template Balasan** — editor CRUD (Edit, Tambah, Simpan, Hapus). Template bawaan bertanda **Khusus Admin**
+- **Tab Laporan** — pilih kategori (Struktur Partai, Badan/Sayap Partai, Perizinan Kegiatan, Aspirasi, Pengiriman, Informasi), periode Harian/Mingguan/Bulanan, dan **Download Excel (.xlsx)**
+- **Tombol Export CSV / Export PDF** — download seluruh log sesuai filter tanggal yang dipilih
 - **Tombol Reconnect** — menyambung ulang koneksi tanpa scan ulang
 - **Tombol Scan Ulang** — menghapus sesi lama dan menampilkan QR baru (jika nomor hotline berganti atau keluar)
 
 ## ✏️ Mengubah Template Balasan (Edit / Tambah / Hapus / Simpan)
 
 **Cara termudah: lewat dashboard** — buka tab **"Template Balasan"**. Ada dua jenis:
-- **Template Bawaan** (alur menu: sambutan, menu, form, penutup, info) — klik **Edit** teksnya lalu **Simpan**. Perubahan langsung aktif, **tanpa restart**. Tidak bisa dihapus (karena dipakai alur menu).
-- **Aturan Tambahan** (keyword → balasan otomatis) — klik **"+ Tambah Aturan Balasan"**, isi keyword (mis. "jam operasional") dan teks balasan. Jika pesan masuk mengandung keyword tersebut, bot membalas dengan teks itu. Bisa **Edit** dan **Hapus**.
+- **Template Bawaan** (alur menu: sambutan, menu, form, penutup, info) — ditandai badge **Khusus Admin**. Hanya Administrator yang login dashboard yang dapat mengedit, menyimpan, dan menambah alur bawaan baru (tombol **+ Tambah Alur Bawaan**); tidak bisa dihapus. Perubahan langsung aktif, **tanpa restart**.
+- **Aturan Tambahan** (keyword → balasan otomatis) — klik **"+ Tambah Aturan Keyword"**, isi keyword (mis. "jam operasional") dan teks balasan. Jika pesan masuk mengandung keyword tersebut, bot membalas dengan teks itu. Bisa **Edit** dan **Hapus**.
 
 Semua template disimpan di database (`data/hotline.db`), bukan di file. Backup database = backup template.
 
-Jika ingin mengubah default (seed awal), edit **`src/templates.js`** lalu hapus tabel templates di DB (atau hapus `data/hotline.db` untuk reset total).
+Jika ingin mengubah default (seed awal), edit **`src/templates.js`**. Versi seed (`SEED_VERSION` di `src/templateStore.js`) otomatis mengganti template bawaan lama saat aplikasi start, sedangkan aturan keyword buatan admin tetap dipertahankan.
 
-## 🔄 Alur Percakapan (sesuai template)
+## 🔄 Alur Percakapan (sesuai FLOW NARAHUBUNG DPD)
 
 ```
-Pesan masuk → Welcome + Menu Utama (6 opsi)
-├─ 1. Struktur Partai → pilih DPD/DPC/PAC/Ranting/Anak Ranting → form Nama+Jabatan → pilih Kegiatan → Konfirmasi kehadiran → Terimakasih
-├─ 2. Badan/Sayap → pilih TMP/BMI/BBHAR/BAMUSI/GNTI/BSPN/BAGUNA/BPEK → form → pilih Kegiatan → Konfirmasi → Terimakasih
-├─ 3. Penyampaian → Laporan Partai / Aspirasi Kepartaian / Aspirasi Warga → form → Terimakasih
-├─ 4. Perizinan Kegiatan → form lengkap → Terimakasih
-├─ 5. Pengiriman → form → Terimakasih
-└─ 6. Informasi → Alamat Kantor DPD / Media Sosial / Pembuatan KTA / Alamat DPC (per kota) → info + Terimakasih
-```
+Pesan masuk → Welcome + Menu Utama (6 opsi) + jejak perintah (0 / 9 / #)
+├─ 1. Struktur Partai → DPD / DPC / PAC → Struktur Pengurus Tingkatan
+├─ 2. Badan/Sayap Partai → BSPN/BPEK/BBHAR/BAGUNA/BAMUSI/BMI/TMP → Struktur Pengurus Badan/Sayap
+├─ 3. Perizinan
+│   ├─ Kehadiran → DPD/DPC/PAC/Badan-Sayap → Form data → Pilih Kegiatan → Konfirmasi (Tidak Hadir/Izin Sakit) → Keterangan → Penutup Konfirmasi
+│   └─ Peminjaman → Barang/Aset (form data peminjam + barang) / Ruangan (form data peminjam + agenda) → Penutup Peminjaman
+├─ 4. Aspirasi → Laporan Partai / Aspirasi Kepartaian / Aspirasi Kader (form) → Penutup Aspirasi
+├─ 5. Pengiriman → Form data pengirim, jenis kiriman, tujuan → Penutup Pengiriman
+└─ 6. Informasi → Alamat DPD / Kontak DPC (6 wilayah) / Media Sosial / KTA / Agenda Kegiatan
+
+Perintah: 0 = Menu Utama, 9 = Menu Sebelumnya, # = Akhiri.
+Idle 2 menit atau ketik # → pesan penutup; pesan berikutnya mulai dari awal.
+Pesan tidak dikenal / di luar konteks → balasan sopan khusus (Mohon Maaf …).
 
 ## 📁 Struktur Folder
 
@@ -96,11 +105,13 @@ wa-hotline-bot/
 ├── src/
 │   ├── index.js          # entry point (jalankan bot + dashboard)
 │   ├── loadEnv.js        # pembaca file .env otomatis
-│   ├── whatsapp.js       # koneksi WhatsApp (Baileys) + QR
-│   ├── bot.js            # mesin percakapan / state machine
-│   ├── templates.js      # semua teks balasan (EDIT DI SINI)
-│   ├── db.js             # database SQLite (log pesan & state)
-│   └── server.js         # API dashboard + export CSV/PDF
+│   ├── whatsapp.js       # koneksi WhatsApp (Baileys) + QR + kirim pesan
+│   ├── bot.js            # mesin percakapan / state machine (0/9/#, idle, reject)
+│   ├── scheduler.js      # penutup otomatis percakapan idle 2 menit
+│   ├── templates.js      # semua teks balasan bawaan (FLOW NARAHUBUNG DPD)
+│   ├── templateStore.js  # seed versioning + cache template dari DB
+│   ├── db.js             # database SQLite (log pesan, state, template, pengaturan)
+│   └── server.js         # API dashboard, laporan Excel, export CSV/PDF
 ├── public/               # tampilan dashboard (HTML/CSS/JS)
 └── data/                 # database & sesi login (dibuat otomatis)
 ```

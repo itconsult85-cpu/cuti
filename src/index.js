@@ -7,12 +7,14 @@
 // =====================================================================
 require('./loadEnv');
 
-const { startSock } = require('./whatsapp');
+const { startSock, sendText } = require('./whatsapp');
 const { startServer } = require('./server');
+const scheduler = require('./scheduler');
 const db = require('./db');
 
 db.logEvent('app_started');
 startServer();
+scheduler.start(sendText);
 startSock().catch(err => {
   console.error('[fatal] gagal start WhatsApp:', err.message);
   db.logEvent('start_failed', err.message);
