@@ -42,8 +42,7 @@
   <div class="tabs-right">
     <input type="date" id="filterFrom" title="Dari tanggal">
     <input type="date" id="filterTo" title="Sampai tanggal">
-    <button id="btnExportCsv" class="btn btn-sm btn-primary">Export CSV</button>
-    <button id="btnExportPdf" class="btn btn-sm btn-primary">Export PDF</button>
+    <button id="btnExportPdf" class="btn btn-sm btn-primary">Export PDF Log</button>
   </div>
 </nav>
 
@@ -146,9 +145,13 @@
   <section id="tab-laporan" class="tab-panel">
     <div class="panel">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <h3 style="margin:0">Laporan Percakapan per Menu Utama</h3>
-        <button id="btnExportExcel" class="btn btn-primary">⬇ Download Excel (.xlsx)</button>
+        <h3 style="margin:0">Laporan Data Formulir per Menu Utama</h3>
+        <button id="btnExportExcel" class="btn btn-primary">⬇ Download Excel (.xlsx — 1 file, sheet per menu)</button>
       </div>
+      <p class="muted small" style="margin-bottom:12px">
+        Laporan hanya menampilkan <b>data formulir yang diisi pengirim</b> (bukan kutipan chat).
+        File Excel berisi satu sheet terpisah untuk tiap menu utama; kolom menyesuaikan formulir masing-masing menu.
+      </p>
       <div class="filter-row">
         <span class="muted small"><b>Kategori:</b></span>
         <div class="chip-row" id="laporanChips">
@@ -175,9 +178,7 @@
       <div class="kpi-mini" id="lapSummary"></div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr>
-            <th>Waktu</th><th>Nama</th><th>Nomor</th><th>Pilihan Menu / Submenu</th><th>Isi Pesan / Jawaban</th><th>Data Form</th>
-          </tr></thead>
+          <thead id="lapHead"><tr></tr></thead>
           <tbody id="lapBody"></tbody>
         </table>
       </div>

@@ -75,6 +75,20 @@ check(r.stage === 'form_aspirasi_kader', 'Aspirasi Kader -> form kader');
 r = step('628444@lid', 'Uji Empat', 'Nama: Siti, NO KTA: 123', 'Laporan yang telah');
 check(r.closed === true, 'Form aspirasi kader closed');
 
+// ---- Data formulir terstruktur tersimpan di form_entries (sumber Laporan/Excel) ----
+const entries = db.listFormEntries({});
+const perizinan = entries.filter(e => e.kategori === 'Perizinan Kegiatan');
+check(perizinan.length >= 1, 'Entri Perizinan Kegiatan tersimpan');
+const eDpd = perizinan.find(e => e.subkategori === 'Kehadiran — DPD');
+check(!!eDpd, 'Entri Kehadiran DPD ditemukan');
+check(eDpd && eDpd.status === 'Tidak Hadir', 'Status kehadiran (Tidak Hadir) tersimpan');
+check(eDpd && eDpd.kegiatan === 'Piket Harian DPD', 'Kegiatan tersimpan di entri');
+check(eDpd && eDpd.fields.nama === 'Budi' && eDpd.fields.jabatan === 'Sekretaris', 'Field Nama/Jabatan terparse dari formulir');
+check(entries.some(e => e.kategori === 'Struktur Partai' && e.subkategori === 'DPD'), 'Entri Struktur Partai DPD tersimpan');
+check(entries.some(e => e.kategori === 'Aspirasi' && e.subkategori === 'Aspirasi Kader'), 'Entri Aspirasi Kader tersimpan');
+check(entries.some(e => e.kategori === 'Pengiriman'), 'Entri Pengiriman tersimpan');
+check(entries.some(e => e.kategori === 'Informasi'), 'Entri Informasi tersimpan');
+
 // ---- Seed bawaan terisi versi baru ----
 const tpl = db.getAllTemplates();
 const builtin = tpl.filter(t => t.type === 'builtin');

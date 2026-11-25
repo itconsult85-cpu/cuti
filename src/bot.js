@@ -2,11 +2,15 @@
 // Mesin percakapan (state machine) — FLOW NARAHUBUNG DPD PDI PERJUANGAN
 // DKI JAKARTA. Template diambil dari database (bisa diedit live dashboard).
 // Perintah global: 0 = Menu Utama, 9 = Menu Sebelumnya, # = Akhiri.
+// Data formulir yang dikirim user disimpan TERSTRUKTUR ke tabel
+// form_entries (sumber tab Laporan & ekspor Excel per sheet menu); teks
+// chat mentah hanya tersimpan di tabel messages (Log Pesan operasional).
 // Percakapan yang idle 2 menit ditutup otomatis oleh scheduler.
 // =====================================================================
 const T = require('./templates');
 const Store = require('./templateStore');
 const db = require('./db');
+const { parseForm, nomorFromJid } = require('./forms');
 
 function g(name, fallback) { return Store.get(name) || fallback || ''; }
 const hint = () => g('HINT', T.HINT);
@@ -22,14 +26,25 @@ const MAIN_KEYWORDS = {
   6: ['informasi', 'info', 'alamat', 'medsos', 'media sosial', 'kta', 'kontak'],
 };
 const STRUKTUR_KEYWORDS = { 1: ['dpd'], 2: ['dpc'], 3: ['pac'] };
+const STRUKTUR_NAMES = ['DPD', 'DPC', 'PAC'];
 const BADAN_KEYWORDS = { 1: ['bspn'], 2: ['bpek'], 3: ['bbhar'], 4: ['baguna'], 5: ['bamusi'], 6: ['bmi'], 7: ['tmp'] };
+const BADAN_NAMES = ['BSPN', 'BPEK', 'BBHAR', 'BAGUNA', 'BAMUSI', 'BMI', 'TMP'];
 const IZIN_JENIS_KEYWORDS = { 1: ['kehadiran', 'hadir', 'presensi'], 2: ['peminjaman', 'pinjam'] };
 const IZIN_TARGET_KEYWORDS = { 1: ['dpd'], 2: ['dpc'], 3: ['pac'], 4: ['badan', 'sayap'] };
 const PEMINJAMAN_KEYWORDS = { 1: ['barang', 'aset'], 2: ['ruangan', 'ruang'] };
 const ASPIRASI_KEYWORDS = { 1: ['laporan partai', 'laporan'], 2: ['kepartaian'], 3: ['kader'] };
-const INFORMASI_KEYWORDS = { 1: ['kantor dpd', 'alamat kantor'], 2: ['dpc'], 3: ['media', 'sosial', 'instagram', 'website'], 4: ['kta'], 5: ['agenda', 'kalender'] };
+const INFORMASI_KEYWORDS = { 1: ['kantor dpd', 'alamat kantor', 'alamat'], 2: ['dpc'], 3: ['media', 'sosial', 'instagram', 'website'], 4: ['kta'], 5: ['agenda', 'kalender'] };
 const DPC_KEYWORDS = { 1: ['pusat'], 2: ['timur'], 3: ['selatan'], 4: ['barat'], 5: ['utara'], 6: ['seribu'] };
-const KONFIRMASI_KEYWORDS = { 1: ['tidak hadir', 'tidak'], 2: ['izin sakit', 'sakit'] };
+const DPC_NAMES = ['Jakarta Pusat', 'Jakarta Timur', 'Jakarta Selatan', 'Jakarta Barat', 'Jakarta Utara', 'Kepulauan Seribu'];
+const KONFIRMASI_KEYWORDS = { 1: ['tidak hadir', 'tidak'], 2: ['izin sakit', 'sakit', 'izin'] };
+
+// Daftar kegiatan per target + keyword numerik/teks.
+const ACT_DPD = ['Piket Harian DPD', 'Rapat Pleno', 'Rapat gabungan', 'Agenda Eksternal', 'Kegiatan Partai'];
+const ACT_LAIN = ['Rapat gabungan', 'Agenda eksternal', 'Kegiatan Partai'];
+const ACT_BADAN = ['Kegiatan Badan/Sayap', 'Rapat gabungan', 'Kegiatan Partai'];
+const ACT_DPD_KEY = { 1: ['piket'], 2: ['pleno'], 3: ['gabungan'], 4: ['eksternal', 'agenda'], 5: ['partai'] };
+const ACT_LAIN_KEY = { 1: ['gabungan'], 2: ['eksternal', 'agenda'], 3: ['partai'] };
+const ACT_BADAN_KEY = { 1: ['badan', 'sayap'], 2: ['gabungan'], 3: ['partai'] };
 
 function pick(text, map, max) {
   const t = (text || '').trim().toLowerCase();
@@ -51,6 +66,21 @@ function out(replies, opts = {}) {
   };
 }
 
+// ---- Catat satu entri data terstruktur untuk tabel Laporan / Excel ----
+function record(jid, name, entry) {
+  db.insertFormEntry({
+    jid,
+    name: name || null,
+    nomor: nomorFromJid(jid),
+    kategori: entry.kategori,
+    subkategori: entry.subkategori || null,
+    status: entry.status || null,
+    kegiatan: entry.kegiatan || null,
+    fields: entry.fields || {},
+    sourceStage: entry.sourceStage || null,
+  });
+}
+
 // Render ulang prompt sebuah stage untuk perintah "9" (menu sebelumnya)
 function renderStage(stage) {
   switch (stage) {
@@ -70,6 +100,7 @@ function renderStage(stage) {
     case 'activity_lain': return withHint(g('ACTIVITY_LAIN', T.ACTIVITY_LAIN));
     case 'activity_badan': return withHint(g('ACTIVITY_BADAN', T.ACTIVITY_BADAN));
     case 'konfirmasi': return withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN));
+    case 'form_keterangan': return g('FORM_KETERANGAN', T.FORM_KETERANGAN);
     default: return withHint(g('WELCOME', T.WELCOME));
   }
 }
@@ -131,20 +162,39 @@ function handle(jid, name, rawText) {
       return out([withHint(g('INFORMASI_MENU', T.INFORMASI_MENU))], { stage: 'informasi_menu', menuChoice: label });
     }
 
+    // ---- Menu 1: Struktur Partai (DPD / DPC / PAC) ----
     case 'struktur_menu': {
       const c = pick(trimmed, STRUKTUR_KEYWORDS, 3);
       if (!c) return reject();
+      const nama = STRUKTUR_NAMES[c - 1];
+      record(jid, name, {
+        kategori: 'Struktur Partai', subkategori: nama,
+        fields: {}, sourceStage: 'struktur_menu',
+      });
       db.setState(jid, name, { stage: 'main', data: { prev: 'main' } });
-      return out([withHint(g('STRUKTUR_RESULT', T.STRUKTUR_RESULT))], { stage: 'main', menuChoice: 'Struktur Partai — ' + ['DPD', 'DPC', 'PAC'][c - 1] });
+      return out([withHint(g('STRUKTUR_RESULT', T.STRUKTUR_RESULT))], {
+        stage: 'main', menuChoice: 'Struktur Partai — ' + nama,
+        formData: { kategori: 'Struktur Partai', subkategori: nama },
+      });
     }
 
+    // ---- Menu 2: Badan/Sayap Partai ----
     case 'badan_menu': {
       const c = pick(trimmed, BADAN_KEYWORDS, 7);
       if (!c) return reject();
+      const nama = BADAN_NAMES[c - 1];
+      record(jid, name, {
+        kategori: 'Badan/Sayap Partai', subkategori: nama,
+        fields: {}, sourceStage: 'badan_menu',
+      });
       db.setState(jid, name, { stage: 'main', data: { prev: 'main' } });
-      return out([withHint(g('BADAN_RESULT', T.BADAN_RESULT))], { stage: 'main', menuChoice: 'Badan/Sayap Partai — ' + ['BSPN', 'BPEK', 'BBHAR', 'BAGUNA', 'BAMUSI', 'BMI', 'TMP'][c - 1] });
+      return out([withHint(g('BADAN_RESULT', T.BADAN_RESULT))], {
+        stage: 'main', menuChoice: 'Badan/Sayap Partai — ' + nama,
+        formData: { kategori: 'Badan/Sayap Partai', subkategori: nama },
+      });
     }
 
+    // ---- Menu 3: Perizinan -> Kehadiran / Peminjaman ----
     case 'perizinan_menu': {
       const c = pick(trimmed, IZIN_JENIS_KEYWORDS, 2);
       if (!c) return reject();
@@ -158,71 +208,102 @@ function handle(jid, name, rawText) {
       const c = pick(trimmed, IZIN_TARGET_KEYWORDS, 4);
       if (!c) return reject();
       data.prev = 'izin_target_menu';
+      data.target = c === 1 ? 'DPD' : c === 2 ? 'DPC' : c === 3 ? 'PAC' : 'Badan/Sayap Partai';
+      data.fields = data.fields || {};
+      data.fields.target = data.target;
       if (c === 1) { db.setState(jid, name, { stage: 'form_izin_dpd', data }); return out([g('FORM_IZIN_DPD', T.FORM_IZIN_DPD)], { stage: 'form_izin_dpd', menuChoice: 'Kehadiran — DPD' }); }
       if (c === 4) { db.setState(jid, name, { stage: 'badan_pilih', data }); return out([withHint(g('BADAN_MENU', T.BADAN_MENU))], { stage: 'badan_pilih', menuChoice: 'Kehadiran — Badan/Sayap' }); }
       db.setState(jid, name, { stage: 'form_izin_lain', data });
-      return out([g('FORM_IZIN_LAIN', T.FORM_IZIN_LAIN)], { stage: 'form_izin_lain', menuChoice: 'Kehadiran — ' + ['DPD', 'DPC', 'PAC'][c - 1] });
+      return out([g('FORM_IZIN_LAIN', T.FORM_IZIN_LAIN)], { stage: 'form_izin_lain', menuChoice: 'Kehadiran — ' + data.target });
     }
 
     case 'badan_pilih': {
       const c = pick(trimmed, BADAN_KEYWORDS, 7);
       if (!c) return reject();
-      data.badan = ['BSPN', 'BPEK', 'BBHAR', 'BAGUNA', 'BAMUSI', 'BMI', 'TMP'][c - 1];
+      data.badan = BADAN_NAMES[c - 1];
+      data.fields = data.fields || {};
+      data.fields.badan = data.badan;
       data.prev = 'izin_target_menu';
       db.setState(jid, name, { stage: 'form_izin_badan', data });
       return out([g('FORM_IZIN_BADAN', T.FORM_IZIN_BADAN)], { stage: 'form_izin_badan', menuChoice: 'Kehadiran — Badan/Sayap — ' + data.badan });
     }
 
-    // ---- Form kehadiran (free text diterima apa adanya) ----
+    // ---- Form Kehadiran: isi data diri, lalu pilih kegiatan ----
     case 'form_izin_dpd': {
+      data.fields = Object.assign({}, data.fields, parseForm(trimmed, 'izin_dpd'));
       data.prev = 'izin_target_menu';
       db.setState(jid, name, { stage: 'activity_dpd', data });
-      return out([withHint(g('ACTIVITY_DPD', T.ACTIVITY_DPD))], { stage: 'activity_dpd', formData: { jawaban: trimmed, formulir: 'Kehadiran DPD' } });
+      return out([withHint(g('ACTIVITY_DPD', T.ACTIVITY_DPD))], { stage: 'activity_dpd', formData: { formulir: 'Kehadiran DPD', fields: data.fields } });
     }
     case 'form_izin_lain': {
+      data.fields = Object.assign({}, data.fields, parseForm(trimmed, 'izin_lain'));
       data.prev = 'izin_target_menu';
       db.setState(jid, name, { stage: 'activity_lain', data });
-      return out([withHint(g('ACTIVITY_LAIN', T.ACTIVITY_LAIN))], { stage: 'activity_lain', formData: { jawaban: trimmed, formulir: 'Kehadiran DPC/PAC' } });
+      return out([withHint(g('ACTIVITY_LAIN', T.ACTIVITY_LAIN))], { stage: 'activity_lain', formData: { formulir: 'Kehadiran ' + data.target, fields: data.fields } });
     }
     case 'form_izin_badan': {
+      data.fields = Object.assign({}, data.fields, parseForm(trimmed, 'izin_badan'));
       data.prev = 'badan_pilih';
       db.setState(jid, name, { stage: 'activity_badan', data });
-      return out([withHint(g('ACTIVITY_BADAN', T.ACTIVITY_BADAN))], { stage: 'activity_badan', formData: { jawaban: trimmed, badan: data.badan, formulir: 'Kehadiran Badan/Sayap' } });
+      return out([withHint(g('ACTIVITY_BADAN', T.ACTIVITY_BADAN))], { stage: 'activity_badan', formData: { formulir: 'Kehadiran Badan/Sayap ' + data.badan, fields: data.fields } });
     }
 
     case 'activity_dpd': {
-      data.activity = trimmed;
+      const c = pick(trimmed, ACT_DPD_KEY, ACT_DPD.length);
+      if (!c) return reject();
+      data.kegiatan = ACT_DPD[c - 1];
       data.prev = 'form_izin_dpd';
       db.setState(jid, name, { stage: 'konfirmasi', data });
-      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan DPD: ' + trimmed.slice(0, 80) });
+      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan DPD: ' + data.kegiatan });
     }
     case 'activity_lain': {
-      data.activity = trimmed;
+      const c = pick(trimmed, ACT_LAIN_KEY, ACT_LAIN.length);
+      if (!c) return reject();
+      data.kegiatan = ACT_LAIN[c - 1];
       data.prev = 'form_izin_lain';
       db.setState(jid, name, { stage: 'konfirmasi', data });
-      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan DPC/PAC: ' + trimmed.slice(0, 80) });
+      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan ' + data.target + ': ' + data.kegiatan });
     }
     case 'activity_badan': {
-      data.activity = trimmed;
+      const c = pick(trimmed, ACT_BADAN_KEY, ACT_BADAN.length);
+      if (!c) return reject();
+      data.kegiatan = ACT_BADAN[c - 1];
       data.prev = 'form_izin_badan';
       db.setState(jid, name, { stage: 'konfirmasi', data });
-      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan Badan: ' + trimmed.slice(0, 80) });
+      return out([withHint(g('KONFIRMASI_IZIN', T.KONFIRMASI_IZIN))], { stage: 'konfirmasi', menuChoice: 'Kegiatan Badan: ' + data.kegiatan });
     }
 
     case 'konfirmasi': {
       const c = pick(trimmed, KONFIRMASI_KEYWORDS, 2);
       if (!c) return reject();
-      data.konfirmasi = c === 1 ? 'Tidak Hadir' : 'Izin Sakit';
+      data.status = c === 1 ? 'Tidak Hadir' : 'Izin Sakit';
       data.prev = stage;
       db.setState(jid, name, { stage: 'form_keterangan', data });
-      return out([g('FORM_KETERANGAN', T.FORM_KETERANGAN)], { stage: 'form_keterangan', menuChoice: 'Konfirmasi: ' + data.konfirmasi });
+      return out([g('FORM_KETERANGAN', T.FORM_KETERANGAN)], { stage: 'form_keterangan', menuChoice: 'Konfirmasi: ' + data.status });
     }
     case 'form_keterangan': {
-      data.keterangan = trimmed;
+      data.fields.keterangan = trimmed;
+      const subkategori = data.target === 'DPD'
+        ? 'Kehadiran — DPD'
+        : data.target === 'Badan/Sayap Partai'
+          ? 'Kehadiran — Badan/Sayap — ' + (data.badan || '')
+          : 'Kehadiran — ' + data.target;
+      record(jid, name, {
+        kategori: 'Perizinan Kegiatan',
+        subkategori,
+        status: data.status,
+        kegiatan: data.kegiatan,
+        fields: data.fields,
+        sourceStage: 'form_keterangan',
+      });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      return out([g('CLOSING_KONFIRMASI', T.CLOSING_KONFIRMASI)], { stage: 'closed', formData: { keterangan: trimmed, konfirmasi: data.konfirmasi, kegiatan: data.activity }, closed: true });
+      return out([g('CLOSING_KONFIRMASI', T.CLOSING_KONFIRMASI)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Perizinan Kegiatan', subkategori, status: data.status, kegiatan: data.kegiatan, fields: data.fields },
+      });
     }
 
+    // ---- Perizinan Peminjaman ----
     case 'peminjaman_menu': {
       const c = pick(trimmed, PEMINJAMAN_KEYWORDS, 2);
       if (!c) return reject();
@@ -232,14 +313,33 @@ function handle(jid, name, rawText) {
       return out([g('FORM_PEMINJAMAN_RUANGAN', T.FORM_PEMINJAMAN_RUANGAN)], { stage: 'form_peminjaman_ruangan', menuChoice: 'Perizinan — Peminjaman Ruangan' });
     }
     case 'form_peminjaman_aset': {
+      const fields = parseForm(trimmed, 'pinjam_aset');
+      record(jid, name, {
+        kategori: 'Perizinan Kegiatan',
+        subkategori: 'Peminjaman Barang/Aset',
+        fields, sourceStage: 'form_peminjaman_aset',
+      });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      return out([g('CLOSING_PEMINJAMAN', T.CLOSING_PEMINJAMAN)], { stage: 'closed', formData: { jawaban: trimmed, formulir: 'Peminjaman Barang/Aset' }, closed: true });
+      return out([g('CLOSING_PEMINJAMAN', T.CLOSING_PEMINJAMAN)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Perizinan Kegiatan', subkategori: 'Peminjaman Barang/Aset', fields },
+      });
     }
     case 'form_peminjaman_ruangan': {
+      const fields = parseForm(trimmed, 'pinjam_ruangan');
+      record(jid, name, {
+        kategori: 'Perizinan Kegiatan',
+        subkategori: 'Peminjaman Ruangan',
+        fields, sourceStage: 'form_peminjaman_ruangan',
+      });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      return out([g('CLOSING_PEMINJAMAN', T.CLOSING_PEMINJAMAN)], { stage: 'closed', formData: { jawaban: trimmed, formulir: 'Peminjaman Ruangan' }, closed: true });
+      return out([g('CLOSING_PEMINJAMAN', T.CLOSING_PEMINJAMAN)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Perizinan Kegiatan', subkategori: 'Peminjaman Ruangan', fields },
+      });
     }
 
+    // ---- Menu 4: Aspirasi ----
     case 'aspirasi_menu': {
       const c = pick(trimmed, ASPIRASI_KEYWORDS, 3);
       if (!c) return reject();
@@ -250,38 +350,71 @@ function handle(jid, name, rawText) {
       return out([g('FORM_ASPIRASI_UMUM', T.FORM_ASPIRASI_UMUM)], { stage: 'form_aspirasi_umum', menuChoice: 'Aspirasi — ' + ['Laporan Partai', 'Kepartaian'][c - 1] });
     }
     case 'form_aspirasi_umum': {
+      const fields = parseForm(trimmed, 'aspirasi_umum');
+      const subkategori = data.sub === 2 ? 'Aspirasi Kepartaian' : 'Laporan Partai';
+      record(jid, name, { kategori: 'Aspirasi', subkategori, fields, sourceStage: 'form_aspirasi_umum' });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      const formulir = data.sub === 2 ? 'Aspirasi Kepartaian' : 'Laporan Partai';
-      return out([g('CLOSING_ASPIRASI', T.CLOSING_ASPIRASI)], { stage: 'closed', formData: { jawaban: trimmed, formulir }, closed: true });
+      return out([g('CLOSING_ASPIRASI', T.CLOSING_ASPIRASI)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Aspirasi', subkategori, fields },
+      });
     }
     case 'form_aspirasi_kader': {
+      const fields = parseForm(trimmed, 'aspirasi_kader');
+      record(jid, name, { kategori: 'Aspirasi', subkategori: 'Aspirasi Kader', fields, sourceStage: 'form_aspirasi_kader' });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      return out([g('CLOSING_ASPIRASI', T.CLOSING_ASPIRASI)], { stage: 'closed', formData: { jawaban: trimmed, formulir: 'Aspirasi Kader' }, closed: true });
+      return out([g('CLOSING_ASPIRASI', T.CLOSING_ASPIRASI)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Aspirasi', subkategori: 'Aspirasi Kader', fields },
+      });
     }
 
+    // ---- Menu 5: Pengiriman ----
     case 'form_pengiriman': {
+      const fields = parseForm(trimmed, 'pengiriman');
+      record(jid, name, { kategori: 'Pengiriman', subkategori: 'Pengiriman Kiriman', fields, sourceStage: 'form_pengiriman' });
       db.setState(jid, name, { stage: 'closed', data: { ...data, endedAt: Date.now(), reason: 'form-selesai' } });
-      return out([g('CLOSING_PENGIRIMAN', T.CLOSING_PENGIRIMAN)], { stage: 'closed', formData: { jawaban: trimmed, formulir: 'Pengiriman' }, closed: true });
+      return out([g('CLOSING_PENGIRIMAN', T.CLOSING_PENGIRIMAN)], {
+        stage: 'closed', closed: true,
+        formData: { kategori: 'Pengiriman', subkategori: 'Pengiriman Kiriman', fields },
+      });
     }
 
+    // ---- Menu 6: Informasi ----
     case 'informasi_menu': {
       const c = pick(trimmed, INFORMASI_KEYWORDS, 5);
       if (!c) return reject();
       data.prev = 'informasi_menu';
-      if (c === 1) { db.setState(jid, name, { stage: 'informasi_menu', data }); return out([withHint(g('INFO_DPD', T.INFO_DPD))], { stage: 'informasi_menu', menuChoice: 'Informasi — Alamat Kantor DPD' }); }
-      if (c === 2) { db.setState(jid, name, { stage: 'dpc_menu', data }); return out([withHint(g('DPC_MENU', T.DPC_MENU))], { stage: 'dpc_menu', menuChoice: 'Informasi — Alamat dan Kontak DPC' }); }
-      if (c === 3) { db.setState(jid, name, { stage: 'informasi_menu', data }); return out([withHint(g('INFO_MEDSOS', T.INFO_MEDSOS))], { stage: 'informasi_menu', menuChoice: 'Informasi — Media Sosial DPD' }); }
-      if (c === 4) { db.setState(jid, name, { stage: 'informasi_menu', data }); return out([withHint(g('INFO_KTA', T.INFO_KTA))], { stage: 'informasi_menu', menuChoice: 'Informasi — Pembuatan KTA' }); }
+      const infoLabel = ['Alamat Kantor DPD', 'Alamat dan Kontak DPC', 'Media Sosial DPD', 'Pembuatan KTA PDI PERJUANGAN', 'Agenda Kegiatan Partai'][c - 1];
+      if (c === 2) { db.setState(jid, name, { stage: 'dpc_menu', data }); return out([withHint(g('DPC_MENU', T.DPC_MENU))], { stage: 'dpc_menu', menuChoice: 'Informasi — ' + infoLabel }); }
+      record(jid, name, { kategori: 'Informasi', subkategori: infoLabel, fields: {}, sourceStage: 'informasi_menu' });
+      let text;
+      if (c === 1) text = g('INFO_DPD', T.INFO_DPD);
+      else if (c === 3) text = g('INFO_MEDSOS', T.INFO_MEDSOS);
+      else if (c === 4) text = g('INFO_KTA', T.INFO_KTA);
+      else text = g('INFO_AGENDA', T.INFO_AGENDA);
       db.setState(jid, name, { stage: 'informasi_menu', data });
-      return out([withHint(g('INFO_AGENDA', T.INFO_AGENDA))], { stage: 'informasi_menu', menuChoice: 'Informasi — Agenda Kegiatan Partai' });
+      return out([withHint(text)], {
+        stage: 'informasi_menu', menuChoice: 'Informasi — ' + infoLabel,
+        formData: { kategori: 'Informasi', subkategori: infoLabel },
+      });
     }
 
     case 'dpc_menu': {
       const c = pick(trimmed, DPC_KEYWORDS, 6);
       if (!c) return reject();
+      const wilayah = DPC_NAMES[c - 1];
+      record(jid, name, {
+        kategori: 'Informasi',
+        subkategori: 'Alamat dan Kontak DPC — ' + wilayah,
+        fields: { wilayah }, sourceStage: 'dpc_menu',
+      });
       const row = Store.infoDpcText(c) || T.infoDpcText(c);
       db.setState(jid, name, { stage: 'informasi_menu', data });
-      return out([withHint(row)], { stage: 'informasi_menu', menuChoice: 'Informasi DPC — ' + ['Jakarta Pusat', 'Jakarta Timur', 'Jakarta Selatan', 'Jakarta Barat', 'Jakarta Utara', 'Kepulauan Seribu'][c - 1] });
+      return out([withHint(row)], {
+        stage: 'informasi_menu', menuChoice: 'Informasi DPC — ' + wilayah,
+        formData: { kategori: 'Informasi', subkategori: 'Alamat dan Kontak DPC — ' + wilayah, fields: { wilayah } },
+      });
     }
 
     default:

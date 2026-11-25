@@ -52,12 +52,20 @@ function check(cond, label) {
   for (const kat of ['struktur', 'badan', 'perizinan', 'aspirasi', 'pengiriman', 'informasi', 'all']) {
     const l = await (await fetch(`${base}/api/laporan?kategori=${kat}&periode=month`)).json();
     check(Array.isArray(l.rows), `Laporan kategori ${kat} mengembalikan rows (${l.rows.length})`);
+    check(Array.isArray(l.columns) && l.columns.length > 0, `Laporan kategori ${kat} punya kolom terstruktur (${l.columns.length} kolom)`);
+    check(l.rows.every(r => !('text' in r)), `Laporan kategori ${kat} tidak memuat teks chat mentah`);
   }
 
-  const ex = await fetch(base + '/api/laporan/excel?kategori=perizinan&periode=month');
+  const ex = await fetch(base + '/api/laporan/excel?periode=month');
   const buf = Buffer.from(await ex.arrayBuffer());
   check(ex.status === 200 && buf.length > 1000, 'Ekspor Excel berhasil (bytes=' + buf.length + ')');
   check(buf.slice(0, 2).toString() === 'PK', 'File Excel berformat ZIP/XLSX yang valid');
+  const XLSX = require('xlsx');
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  check(wb.SheetNames.length === 7, 'Excel berisi Ringkasan + 6 sheet menu (sheet=' + wb.SheetNames.length + ')');
+  for (const nama of ['1. Struktur Partai', '2. Badan Sayap Partai', '3. Perizinan Kegiatan', '4. Aspirasi', '5. Pengiriman', '6. Informasi']) {
+    check(wb.SheetNames.includes(nama), 'Sheet ada: ' + nama);
+  }
 
   // Scheduler idle 2 menit: paksa updated_at lama lalu tick dengan pengirim palsu
   db.db.prepare('UPDATE conversations SET updated_at = ? WHERE jid = ?').run(Date.now() - 130000, '629002@lid');

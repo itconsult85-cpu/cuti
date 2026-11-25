@@ -63,8 +63,8 @@ Sistem balas pesan otomatis untuk nomor hotline WhatsApp **NARAHUBUNG DPD PDI Pe
 - **Tab Log Pesan** — semua pesan masuk & keluar, bisa cari berdasarkan isi/nama/nomor, filter tanggal, pagination
 - **Tab Percakapan** — lihat utuh percakapan per pengirim (seperti chat WhatsApp)
 - **Tab Template Balasan** — editor CRUD (Edit, Tambah, Simpan, Hapus). Template bawaan bertanda **Khusus Admin**
-- **Tab Laporan** — pilih kategori (Struktur Partai, Badan/Sayap Partai, Perizinan Kegiatan, Aspirasi, Pengiriman, Informasi), periode Harian/Mingguan/Bulanan, dan **Download Excel (.xlsx)**
-- **Tombol Export CSV / Export PDF** — download seluruh log sesuai filter tanggal yang dipilih
+- **Tab Laporan** — menampilkan **data formulir terstruktur** per menu (bukan kutipan chat mentah); pilih kategori (Struktur Partai, Badan/Sayap Partai, Perizinan Kegiatan, Aspirasi, Pengiriman, Informasi) dan periode Harian/Mingguan/Bulanan. Kolom tabel menyesuaikan formulir tiap menu (termasuk kolom **Status Kehadiran / Izin** pada Perizinan Kehadiran). Tombol **Download Excel (.xlsx)** mengunduh **satu file workbook** dengan **satu sheet terpisah untuk tiap menu** + sheet Ringkasan.
+- **Tombol Export PDF Log** — download log percakapan operasional (tab Log Pesan) sesuai filter tanggal; laporan formulir tidak diexport sebagai CSV.
 - **Tombol Reconnect** — menyambung ulang koneksi tanpa scan ulang
 - **Tombol Scan Ulang** — menghapus sesi lama dan menampilkan QR baru (jika nomor hotline berganti atau keluar)
 
@@ -106,12 +106,14 @@ wa-hotline-bot/
 │   ├── index.js          # entry point (jalankan bot + dashboard)
 │   ├── loadEnv.js        # pembaca file .env otomatis
 │   ├── whatsapp.js       # koneksi WhatsApp (Baileys) + QR + kirim pesan
-│   ├── bot.js            # mesin percakapan / state machine (0/9/#, idle, reject)
+│   ├── bot.js            # mesin percakapan / state machine (0/9/#, idle, reject) + simpan entri formulir
+│   ├── forms.js          # parser formulir: pesan berlabel -> fields terstruktur
+│   ├── reportSchema.js  # skema kolom laporan per menu utama + pemetaan sheet Excel
 │   ├── scheduler.js      # penutup otomatis percakapan idle 2 menit
 │   ├── templates.js      # semua teks balasan bawaan (FLOW NARAHUBUNG DPD)
 │   ├── templateStore.js  # seed versioning + cache template dari DB
-│   ├── db.js             # database SQLite (log pesan, state, template, pengaturan)
-│   └── server.js         # API dashboard, laporan Excel, export CSV/PDF
+│   ├── db.js             # SQLite: log pesan, form_entries, state, template, pengaturan
+│   └── server.js         # API dashboard, laporan Excel multi-sheet, export PDF log
 ├── public/               # tampilan dashboard (HTML/CSS/JS)
 └── data/                 # database & sesi login (dibuat otomatis)
 ```

@@ -54,6 +54,24 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- Data formulir terstruktur hasil pengisian user (sumber tab Laporan & ekspor Excel).
+-- Tabel ini TIDAK berisi teks mentah percakapan; raw chat tetap di tabel messages (Log Pesan).
+CREATE TABLE IF NOT EXISTS form_entries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  jid TEXT,
+  name TEXT,
+  nomor TEXT,
+  kategori TEXT NOT NULL,
+  subkategori TEXT,
+  status TEXT,
+  kegiatan TEXT,
+  fields TEXT NOT NULL DEFAULT '{}',
+  source_stage TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_form_entries_ts ON form_entries(ts);
+CREATE INDEX IF NOT EXISTS idx_form_entries_kat ON form_entries(kategori);
 `);
 
 // ---- messages ----
@@ -174,6 +192,43 @@ function deleteBuiltinTemplates() { return deleteBuiltinTpl.run().changes; }
 const countTpl = db.prepare('SELECT COUNT(*) AS n FROM templates');
 function countTemplates() { return countTpl.get().n; }
 
+// ---- form_entries: data formulir terstruktur (tab Laporan & ekspor Excel) ----
+const insertEntry = db.prepare(`
+  INSERT INTO form_entries (ts, jid, name, nomor, kategori, subkategori, status, kegiatan, fields, source_stage)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+function insertFormEntry({ ts, jid, name, nomor, kategori, subkategori, status, kegiatan, fields, sourceStage }) {
+  return insertEntry.run(
+    ts || Date.now(), jid || null, name || null, nomor || null,
+    kategori, subkategori || null, status || null, kegiatan || null,
+    fields ? JSON.stringify(fields) : '{}', sourceStage || null
+  ).lastInsertRowid;
+}
+
+function listFormEntries({ fromTs, toTs, kategori } = {}) {
+  const where = []; const args = [];
+  if (fromTs) { where.push('ts >= ?'); args.push(fromTs); }
+  if (toTs) { where.push('ts < ?'); args.push(toTs); }
+  if (kategori && kategori !== 'all') { where.push('kategori = ?'); args.push(kategori); }
+  const w = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const rows = db.prepare(`SELECT * FROM form_entries ${w} ORDER BY ts ASC LIMIT 5000`).all(...args);
+  return rows.map(r => {
+    let fields = {};
+    try { fields = JSON.parse(r.fields || '{}'); } catch { fields = {}; }
+    return { ...r, fields };
+  });
+}
+
+const countEntriesByCat = db.prepare(`
+  SELECT kategori, COUNT(*) AS n FROM form_entries
+  WHERE ts >= ? AND ts < ? GROUP BY kategori
+`);
+function countFormEntries(fromTs, toTs) {
+  const out = {};
+  for (const r of countEntriesByCat.all(fromTs || 0, toTs || Date.now() + 86400000)) out[r.kategori] = r.n;
+  return out;
+}
+
 // ---- pengaturan aplikasi (mis. hash password dashboard hasil ganti password) ----
 const getSettingStmt = db.prepare('SELECT value FROM app_settings WHERE key = ?');
 const setSettingStmt = db.prepare(`
@@ -210,4 +265,7 @@ module.exports = {
   getSetting,
   setSetting,
   deleteSetting,
+  insertFormEntry,
+  listFormEntries,
+  countFormEntries,
 };

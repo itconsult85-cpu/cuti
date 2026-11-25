@@ -8,6 +8,7 @@ const PDFDocument = require('pdfkit');
 const db = require('./db');
 const wa = require('./whatsapp');
 const Store = require('./templateStore');
+const Schema = require('./reportSchema');
 
 const app = express();
 
@@ -235,16 +236,9 @@ app.get('/api/conversation/:jid', (req, res) => {
   res.json(db.getConversation(req.params.jid));
 });
 
-// ---- Laporan per kategori (tab Laporan) + ekspor Excel ----
-const LAPORAN_KATEGORI = {
-  struktur: { label: 'Struktur Partai', where: "menu_choice LIKE '%Struktur%' OR stage LIKE 'struktur%'" },
-  badan: { label: 'Badan/Sayap Partai', where: "menu_choice LIKE '%Badan%' OR stage IN ('badan_menu','badan_pilih','form_izin_badan','activity_badan')" },
-  perizinan: { label: 'Perizinan Kegiatan', where: "(menu_choice LIKE '%Perizinan%' OR menu_choice LIKE '%Kehadiran%' OR menu_choice LIKE '%Peminjaman%') OR stage IN ('izin_target_menu','form_izin_dpd','form_izin_lain','form_izin_badan','activity_dpd','activity_lain','activity_badan','konfirmasi','form_keterangan','peminjaman_menu','form_peminjaman_aset','form_peminjaman_ruangan')" },
-  aspirasi: { label: 'Aspirasi', where: "menu_choice LIKE '%Aspirasi%' OR stage LIKE 'form_aspirasi%'" },
-  pengiriman: { label: 'Pengiriman', where: "menu_choice LIKE '%Pengiriman%' OR stage = 'form_pengiriman'" },
-  informasi: { label: 'Informasi', where: "menu_choice LIKE '%Informasi%' OR stage IN ('informasi_menu','dpc_menu')" },
-};
-
+// ---- Laporan per kategori (tab Laporan) ----
+// Sumber data: tabel form_entries (formulir terstruktur), BUKAN teks chat
+// mentah. Tabel messages tetap dipakai khusus tab Log Pesan operasional.
 function laporanRange(q) {
   if (q.from || q.to) return parseRange(q);
   const now = Date.now();
@@ -255,57 +249,103 @@ function laporanRange(q) {
   return { fromTs: todayStart.getTime(), toTs: now + day }; // harian (default)
 }
 
-function laporanRows(kategori, fromTs, toTs) {
-  const cat = LAPORAN_KATEGORI[kategori];
-  const where = ["direction = 'in'", 'ts >= ?', 'ts < ?'];
-  const args = [fromTs || 0, toTs || Date.now() + 86400000];
-  if (cat) where.push('(' + cat.where + ')');
-  return db.db.prepare(`SELECT * FROM messages WHERE ${where.join(' AND ')} ORDER BY ts DESC LIMIT 3000`).all(...args);
-}
-
 app.get('/api/laporan', (req, res) => {
-  const kategori = LAPORAN_KATEGORI[req.query.kategori] ? req.query.kategori : 'all';
+  const key = Schema.byKey(req.query.kategori) ? req.query.kategori : 'all';
   const { fromTs, toTs } = laporanRange(req.query);
-  const rows = laporanRows(kategori, fromTs, toTs);
-  res.json({ kategori, periode: req.query.periode || 'day', fromTs, toTs, rows });
+  const cat = Schema.byKey(key);
+  const entries = db.listFormEntries({
+    fromTs, toTs,
+    kategori: key === 'all' ? 'all' : cat.dbLabel,
+  });
+
+  let columns, rows;
+  if (key === 'all') {
+    columns = Schema.OVERVIEW_COLUMNS;
+    rows = entries.map(Schema.overviewMap);
+  } else {
+    columns = cat.columns;
+    rows = entries.map(cat.map);
+  }
+  const counts = db.countFormEntries(fromTs, toTs);
+  res.json({
+    kategori: key,
+    kategoriLabel: key === 'all' ? 'Semua Menu' : cat.label,
+    periode: req.query.periode || 'day',
+    columns, rows,
+    total: rows.length,
+    counts,
+  });
 });
 
+// ---- Ekspor Excel: SATU file .xlsx dengan satu sheet per menu utama ----
+function xmlEsc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+// Fallback SpreadsheetML .xls (tetap multi-sheet) bila paket xlsx tak terpasang.
+function buildSpreadsheetML(sheets) {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Workbook"?>\n';
+  xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" '
+    + 'xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">';
+  for (const s of sheets) {
+    xml += `<Worksheet ss:Name="${xmlEsc(s.name)}"><Table>`;
+    for (const row of s.rows) {
+      xml += '<Row>' + row.map(cell => `<Cell><Data ss:Type="String">${xmlEsc(cell)}</Data></Cell>`).join('') + '</Row>';
+    }
+    xml += '</Table></Worksheet>';
+  }
+  xml += '</Workbook>';
+  return xml;
+}
+
 app.get('/api/laporan/excel', (req, res) => {
-  const kategori = LAPORAN_KATEGORI[req.query.kategori] ? req.query.kategori : 'all';
   const { fromTs, toTs } = laporanRange(req.query);
-  const rows = laporanRows(kategori, fromTs, toTs);
+  const entries = db.listFormEntries({ fromTs, toTs, kategori: 'all' });
+  const counts = db.countFormEntries(fromTs, toTs);
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+  const sheets = [];
+  // Sheet Ringkasan jumlah entri per menu
+  sheets.push({
+    name: 'Ringkasan',
+    rows: [
+      ['Laporan NARAHUBUNG DPD PDI Perjuangan DKI Jakarta'],
+      ['Periode', req.query.periode === 'week' ? 'Mingguan' : req.query.periode === 'month' ? 'Bulanan' : 'Harian'],
+      ['Tanggal Ekspor', new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })],
+      [],
+      ['Kategori Menu', 'Jumlah Entri'],
+      ...Schema.CATEGORIES.map(c => [c.label, counts[c.dbLabel] || 0]),
+      ['TOTAL', entries.length],
+    ],
+  });
+  for (const cat of Schema.CATEGORIES) {
+    const rows = entries.filter(e => e.kategori === cat.dbLabel).map(cat.map);
+    const header = cat.columns.map(c => c.t);
+    const body = rows.length
+      ? rows.map(r => cat.columns.map(c => r[c.k] ?? ''))
+      : [['(Tidak ada data pada periode ini)']];
+    sheets.push({ name: cat.sheet, rows: [header, ...body] });
+  }
 
   let XLSX = null;
   try { XLSX = require('xlsx'); } catch { XLSX = null; }
 
-  const payload = rows.map(r => ({
-    'Waktu': new Date(r.ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
-    'Nama': r.name || '',
-    'Nomor': String(r.jid || '').replace(/@s\.whatsapp\.net|@lid/g, ''),
-    'Pilihan Menu': r.menu_choice || '',
-    'Tahap': r.stage || '',
-    'Isi Pesan / Jawaban': r.text || '',
-    'Data Form': r.form_data || '',
-  }));
-
   if (!XLSX) {
-    // Fallback CSV (dibuka Excel) bila paket xlsx belum terpasang di VPS
-    const esc = (v) => { const s = String(v ?? '').replace(/"/g, '""'); return /[",\n]/.test(s) ? `"${s}"` : s; };
-    const header = ['Waktu', 'Nama', 'Nomor', 'Pilihan Menu', 'Tahap', 'Isi Pesan / Jawaban', 'Data Form'];
-    const lines = [header.join(',')];
-    for (const r of payload) lines.push(header.map(h => esc(r[h])).join(','));
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="laporan-${kategori}.csv"`);
-    return res.send('﻿' + lines.join('\n'));
+    const xml = buildSpreadsheetML(sheets);
+    res.setHeader('Content-Type', 'application/vnd.ms-excel; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Laporan-NARAHUBUNG-${stamp}.xls"`);
+    return res.send('﻿' + xml);
   }
 
-  const ws = XLSX.utils.json_to_sheet(payload.length ? payload : [{ 'Waktu': '(tidak ada data pada periode ini)' }]);
-  ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 60 }, { wch: 42 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Laporan ' + (LAPORAN_KATEGORI[kategori]?.label || 'Semua Menu'));
+  for (const s of sheets) {
+    const aoa = s.rows;
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = aoa[0] ? aoa[0].map(() => ({ wch: 22 })) : [];
+    XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31));
+  }
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename="laporan-${kategori}-${Date.now()}.xlsx"`);
+  res.setHeader('Content-Disposition', `attachment; filename="Laporan-NARAHUBUNG-${stamp}.xlsx"`);
   res.send(buf);
 });
 

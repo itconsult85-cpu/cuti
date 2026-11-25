@@ -235,7 +235,8 @@ $('btnAddBuiltin').addEventListener('click', async () => {
 });
 $('btnReloadTpl').addEventListener('click', loadTemplates);
 
-// ---- Tab Laporan: 6 kategori menu utama, periode harian/mingguan/bulanan, ekspor Excel ----
+// ---- Tab Laporan: data formulir terstruktur per kategori menu utama,
+// periode harian/mingguan/bulanan, ekspor Excel 1 file multi-sheet. ----
 let lapKat = 'all', lapPer = 'day';
 async function loadLaporan() {
   const p = new URLSearchParams();
@@ -244,19 +245,17 @@ async function loadLaporan() {
   if ($('lapFrom').value) p.set('from', $('lapFrom').value);
   if ($('lapTo').value) p.set('to', $('lapTo').value);
   const data = await (await fetch('/api/laporan?' + p)).json();
-  $('lapSummary').innerHTML = `Total pesan masuk: <b>${data.rows.length}</b>`;
-  $('lapBody').innerHTML = data.rows.map(r => {
-    const t = new Date(r.ts).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
-    const num = String(r.jid || '').replace(/@s\.whatsapp\.net|@lid/g, '');
-    let fd = '';
-    try { fd = r.form_data ? JSON.stringify(JSON.parse(r.form_data), null, 0) : ''; } catch { fd = r.form_data || ''; }
-    return `<tr>
-      <td>${t}</td><td>${esc(r.name || '')}</td><td>${num}</td>
-      <td>${esc(r.menu_choice || r.stage || '')}</td>
-      <td class="cell-text">${esc(r.text || '')}</td>
-      <td class="cell-text">${esc(fd)}</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="6" class="muted">Tidak ada data pada periode ini.</td></tr>';
+  const cols = data.columns || [];
+  $('lapHead').innerHTML = '<tr>' + cols.map(c => `<th>${esc(c.t)}</th>`).join('') + '</tr>';
+  const counts = data.counts || {};
+  let summary = `Total entri formulir: <b>${data.total}</b>`;
+  if (lapKat === 'all') {
+    summary += ' · ' + Object.entries(counts).map(([k, v]) => `${esc(k)}: <b>${v}</b>`).join(' · ');
+  }
+  $('lapSummary').innerHTML = summary;
+  $('lapBody').innerHTML = data.rows.length
+    ? data.rows.map(r => '<tr>' + cols.map(c => `<td>${esc(r[c.k] ?? '')}</td>`).join('') + '</tr>').join('')
+    : `<tr><td colspan="${cols.length || 1}" class="muted">Tidak ada data formulir pada periode ini.</td></tr>`;
 }
 document.querySelectorAll('#laporanChips .chip').forEach(c => c.addEventListener('click', () => {
   document.querySelectorAll('#laporanChips .chip').forEach(x => x.classList.remove('active'));
@@ -271,16 +270,16 @@ document.querySelectorAll('#laporanPeriode .chip').forEach(c => c.addEventListen
 $('btnLapReload').addEventListener('click', loadLaporan);
 $('lapFrom').addEventListener('change', loadLaporan);
 $('lapTo').addEventListener('change', loadLaporan);
+// Unduh 1 file Excel berisi semua sheet menu (periode/filter tanggal berlaku ke semua sheet).
 $('btnExportExcel').addEventListener('click', () => {
   const p = new URLSearchParams();
-  p.set('kategori', lapKat); p.set('periode', lapPer);
+  p.set('periode', lapPer);
   if ($('lapFrom').value) p.set('from', $('lapFrom').value);
   if ($('lapTo').value) p.set('to', $('lapTo').value);
   window.location = '/api/laporan/excel?' + p;
 });
 
-// ---- Export ----
-$('btnExportCsv').addEventListener('click', () => { window.location = '/api/export.csv?' + rangeParams(); });
+// ---- Export PDF (Log Pesan operasional) ----
 $('btnExportPdf').addEventListener('click', () => { window.location = '/api/export.pdf?' + rangeParams(); });
 
 // ---- Keamanan: status login & ganti password dashboard ----
